@@ -173,6 +173,19 @@
         { inst: "snare", steps: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0] },
         { inst: "hat",   steps: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1] }
       ]
+    },
+    {
+      id: "wengweng",
+      name: "嗡嗡",
+      icon: "🎸",
+      color: "#a371f7",
+      groove: "1.4s",
+      variant: 1,
+      parts: [
+        { inst: "bass",
+          steps: [1,0,0,1, 0,0,1,0, 1,0,0,1, 1,0,1,0],
+          notes: [55,0,0,55, 0,0,65.41,0, 55,0,0,55, 98,0,82.41,0] }
+      ]
     }
     /* 未来的乐手会在后续版本加入这里 */
   ];
@@ -389,17 +402,31 @@
   }
 
   /* ==================== 怪兽渲染 ==================== */
-  function monsterSVG(color) {
+  function monsterSVG(color, variant) {
+    var crown = "", bodyRx = 37, bodyRy = 33, bodyCy = 70, footDX = 13, armX = 24;
+
+    if (variant === 1) {
+      // 圆滚滚的低音怪兽：身材横着长，犄角更短
+      crown =
+        '<path d="M40 40 C33 27, 46 23, 49 33 C46 35, 45 38, 45 40 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>' +
+        '<path d="M80 40 C87 27, 74 23, 71 33 C74 35, 75 38, 75 40 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>';
+      bodyRx = 42; bodyRy = 30; bodyCy = 74; footDX = 17; armX = 18;
+    } else {
+      // 标准款
+      crown =
+        '<path d="M38 30 C30 12, 46 8, 50 24 C46 26, 44 30, 44 32 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>' +
+        '<path d="M82 30 C90 12, 74 8, 70 24 C74 26, 76 30, 76 32 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>';
+    }
+
     return '' +
       '<svg class="monster-svg" viewBox="0 0 120 112" xmlns="http://www.w3.org/2000/svg">' +
-        '<path d="M38 30 C30 12, 46 8, 50 24 C46 26, 44 30, 44 32 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>' +
-        '<path d="M82 30 C90 12, 74 8, 70 24 C74 26, 76 30, 76 32 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>' +
-        '<ellipse cx="24" cy="76" rx="8" ry="13" fill="' + color + '" stroke="#10132b" stroke-width="3" transform="rotate(-24 24 76)"/>' +
-        '<ellipse cx="96" cy="76" rx="8" ry="13" fill="' + color + '" stroke="#10132b" stroke-width="3" transform="rotate(24 96 76)"/>' +
-        '<ellipse cx="60" cy="70" rx="37" ry="33" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
-        '<ellipse cx="60" cy="80" rx="23" ry="16" fill="rgba(255,255,255,0.16)"/>' +
-        '<ellipse cx="47" cy="102" rx="10" ry="6" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
-        '<ellipse cx="73" cy="102" rx="10" ry="6" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
+        crown +
+        '<ellipse cx="' + armX + '" cy="76" rx="8" ry="13" fill="' + color + '" stroke="#10132b" stroke-width="3" transform="rotate(-24 ' + armX + ' 76)"/>' +
+        '<ellipse cx="' + (120 - armX) + '" cy="76" rx="8" ry="13" fill="' + color + '" stroke="#10132b" stroke-width="3" transform="rotate(24 ' + (120 - armX) + ' 76)"/>' +
+        '<ellipse cx="60" cy="' + bodyCy + '" rx="' + bodyRx + '" ry="' + bodyRy + '" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
+        '<ellipse cx="60" cy="' + (bodyCy + 10) + '" rx="' + (bodyRx - 14) + '" ry="16" fill="rgba(255,255,255,0.16)"/>' +
+        '<ellipse cx="' + (60 - footDX) + '" cy="102" rx="10" ry="6" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
+        '<ellipse cx="' + (60 + footDX) + '" cy="102" rx="10" ry="6" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
         '<circle cx="46" cy="61" r="9" fill="#fff" stroke="#10132b" stroke-width="2.5"/>' +
         '<circle cx="74" cy="61" r="9" fill="#fff" stroke="#10132b" stroke-width="2.5"/>' +
         '<circle cx="48" cy="63" r="3.6" fill="#1c1f3a"/>' +
@@ -424,7 +451,7 @@
 
       card.innerHTML =
         '<div class="sprite">' +
-          '<div class="bob">' + monsterSVG(m.color) + '</div>' +
+          '<div class="bob">' + monsterSVG(m.color, m.variant || 0) + '</div>' +
           '<span class="instrument-badge">' + m.icon + '</span>' +
           '<span class="zzz">💤</span>' +
         '</div>' +
