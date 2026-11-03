@@ -186,6 +186,19 @@
           steps: [1,0,0,1, 0,0,1,0, 1,0,0,1, 1,0,1,0],
           notes: [55,0,0,55, 0,0,65.41,0, 55,0,0,55, 98,0,82.41,0] }
       ]
+    },
+    {
+      id: "dingding",
+      name: "叮叮",
+      icon: "🎹",
+      color: "#3fb950",
+      groove: "0.95s",
+      variant: 2,
+      parts: [
+        { inst: "lead",
+          steps: [1,0,1,0, 1,0,0,1, 1,0,1,0, 1,0,1,0],
+          notes: [329.63,0,392,0, 440,0,0,392, 329.63,0,293.66,0, 261.63,0,293.66,0] }
+      ]
     }
     /* 未来的乐手会在后续版本加入这里 */
   ];
@@ -411,6 +424,12 @@
         '<path d="M40 40 C33 27, 46 23, 49 33 C46 35, 45 38, 45 40 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>' +
         '<path d="M80 40 C87 27, 74 23, 71 33 C74 35, 75 38, 75 40 Z" fill="' + color + '" stroke="#10132b" stroke-width="3" stroke-linejoin="round"/>';
       bodyRx = 42; bodyRy = 30; bodyCy = 74; footDX = 17; armX = 18;
+    } else if (variant === 2) {
+      // 瘦高的旋律怪兽：头顶一根音叉天线
+      crown =
+        '<path d="M60 36 C56 24, 66 20, 62 8" fill="none" stroke="' + color + '" stroke-width="4" stroke-linecap="round"/>' +
+        '<circle cx="62" cy="8" r="4.5" fill="' + color + '" stroke="#10132b" stroke-width="2.5"/>';
+      bodyRx = 33; bodyRy = 35; bodyCy = 68; footDX = 11; armX = 30;
     } else {
       // 标准款
       crown =
