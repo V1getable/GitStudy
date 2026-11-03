@@ -237,6 +237,29 @@
             587.33,0,0,0, 493.88,0,523.25,0, 587.33,0,0,0, 493.88,0,0,0
           ] }
       ]
+    },
+    {
+      id: "mianmian",
+      name: "绵绵",
+      icon: "🎼",
+      color: "#f778ba",
+      groove: "1.7s",
+      variant: 3,
+      parts: [
+        { inst: "pad",
+          steps: [
+            1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
+          ],
+          notes: [
+            [220, 261.63, 329.63], 0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            [174.61, 220, 261.63], 0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            [196, 261.63, 329.63], 0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+            [196, 246.94, 293.66], 0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
+          ] }
+      ]
     }
     /* 未来的乐手会在后续版本加入这里 */
   ];
@@ -391,11 +414,11 @@
         var pf = ctx.createBiquadFilter();
         pf.type = "lowpass"; pf.frequency.value = 900;
         pg.gain.setValueAtTime(0.001, t);
-        pg.gain.linearRampToValueAtTime(0.07, t + 0.3);
-        pg.gain.setValueAtTime(0.07, t + 1.1);
-        pg.gain.exponentialRampToValueAtTime(0.001, t + 1.55);
+        pg.gain.linearRampToValueAtTime(0.055, t + 0.45);
+        pg.gain.setValueAtTime(0.055, t + 2.0);
+        pg.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
         po.connect(pf); pf.connect(pg); pg.connect(bus);
-        po.start(t); po.stop(t + 1.6);
+        po.start(t); po.stop(t + 2.65);
       });
     }
   }
@@ -468,6 +491,13 @@
         '<path d="M60 36 C56 24, 66 20, 62 8" fill="none" stroke="' + color + '" stroke-width="4" stroke-linecap="round"/>' +
         '<circle cx="62" cy="8" r="4.5" fill="' + color + '" stroke="#10132b" stroke-width="2.5"/>';
       bodyRx = 33; bodyRy = 35; bodyCy = 68; footDX = 11; armX = 30;
+    } else if (variant === 3) {
+      // 蓬松的和声怪兽：头顶三团羊毛
+      crown =
+        '<circle cx="38" cy="40" r="11" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
+        '<circle cx="60" cy="34" r="12" fill="' + color + '" stroke="#10132b" stroke-width="3"/>' +
+        '<circle cx="82" cy="40" r="11" fill="' + color + '" stroke="#10132b" stroke-width="3"/>';
+      bodyRx = 40; bodyRy = 31; bodyCy = 74; footDX = 15; armX = 20;
     } else {
       // 标准款
       crown =
