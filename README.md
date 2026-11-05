@@ -1,4 +1,4 @@
-# GitStudy
+# BetterGitStudy
 
 Support for Git teaching
 
