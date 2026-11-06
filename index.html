@@ -96,14 +96,12 @@
   }
 
   /* ===== 怪兽（Spine 渲染层） ===== */
-  #angel { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-  #angel .figure, #angel .bobber { position: absolute; inset: 0; }
-  #angel canvas { display: block; width: 100%; height: 100%; }
-  #angel .hit {
-    position: absolute; left: 50%; top: 12%;
-    width: 40%; height: 72%;
-    transform: translateX(-50%);
-    pointer-events: auto; cursor: pointer; z-index: 3;
+  #angel, #phonor { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  #angel .figure, #angel .bobber,
+  #phonor .figure, #phonor .bobber { position: absolute; inset: 0; }
+  #angel canvas, #phonor canvas { display: block; width: 100%; height: 100%; }
+  #angel .hit, #phonor .hit {
+    position: absolute; pointer-events: auto; cursor: pointer; z-index: 3;
   }
 
   .monster .figure { transition: filter .35s ease, opacity .35s ease; transform-origin: 50% 88%; }
@@ -475,6 +473,12 @@
 
   </svg>
 
+  <!-- 主唱：唱片小车（Pixi 渲染） -->
+  <div id="phonor" class="monster off" data-monster="singer">
+    <div class="figure"><div class="bobber"></div></div>
+    <div class="hit"></div>
+  </div>
+
   <!-- 吉他手：Spine 角色（Pixi 渲染） -->
   <div id="angel" class="monster off" data-monster="guitar">
     <div class="figure"><div class="bobber"></div></div>
@@ -519,6 +523,7 @@
 <script src="spine/lib/pixi.min.js"></script>
 <script src="spine/lib/pixi-spine-3.8.js"></script>
 <script src="spine/lib/angel-assets.js"></script>
+<script src="spine/lib/phonor-assets.js"></script>
 <script>
 (function () {
   "use strict";
@@ -536,6 +541,7 @@
        1) SVG 里给它一个 data-monster="xxx" 的分组
        2) 在这里登记一条配置（音轨 + 隔几拍点一次头） */
   var MONSTERS = [
+    { id: "singer", src: "singer.mp3", bobBeats: 2, volume: 0.95 },
     { id: "guitar", src: "guitar.mp3", bobBeats: 2, volume: 0.9 }
   ];
 
@@ -835,8 +841,7 @@
 <script>
 (function () {
   "use strict";
-  var host = document.getElementById("angel");
-  var holder = host.querySelector(".bobber");
+
   var hintEl = document.getElementById("hint");
 
   function warn(msg) {
@@ -844,67 +849,16 @@
     hintEl.classList.remove("gone");
   }
 
-  if (!window.PIXI || !PIXI.spine || !PIXI.spine.Spine || !window.ANGEL_ASSETS) {
-    warn("Spine 运行时或角色资源没加载");
+  if (!window.PIXI || !PIXI.spine || !PIXI.spine.Spine) {
+    warn("Spine 运行时没加载");
     return;
   }
 
-  var app = new PIXI.Application({
-    resizeTo: host,
-    backgroundAlpha: 0,
-    antialias: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
-    autoDensity: true
-  });
-  holder.appendChild(app.view);
-
-  /* 舞台 SVG: viewBox 1600x900 + xMidYMax slice。
-     把角色放进同一个坐标系，脚就能精确落在台面，且随窗口等比缩放。 */
+  /* 舞台 SVG: viewBox 1600x900 + xMidYMax slice —— 角色共用这套坐标系 */
   var VB_W = 1600, VB_H = 900;
-  var FOOT_Y = 700;      // 台面 600~725，脚落在靠前沿的木板上
-  /* getLocalBounds 把隐藏换装件（树/灌木）也算进去，可见角色只占高度约 42%。
-     用实测比例标定：CHAR_H 是整体边界高度，可见身高 ≈ CHAR_H * 0.42。 */
-  var VISIBLE_RATIO = 0.42;
-  var CHAR_H = 720;      // 可见身高约 300 SVG 单位 ≈ 屏幕 280px
-  var root = new PIXI.Container();
-  app.stage.addChild(root);
-
-  var character = null;
-  var baseW = 1, baseH = 1;
-  var hit = host.querySelector(".hit");
-
-  function place() {
-    var W = app.screen.width, H = app.screen.height;
-    var sc = Math.max(W / VB_W, H / VB_H);          // slice
-    var ox = (W - VB_W * sc) / 2;                    // xMid
-    var oy = H - VB_H * sc;                          // yMax
-    root.scale.set(sc);
-    root.position.set(ox, oy);
-
-    if (character) {
-      character.scale.set(CHAR_H / baseH);
-      character.position.set(VB_W / 2, FOOT_Y);
-    }
-
-    /* 点击热区贴合「可见部分」而非被隐藏部件撑大的整体边界 */
-    var visH = CHAR_H * VISIBLE_RATIO;
-    var visW = CHAR_H * baseW / baseH * 0.30;
-    hit.style.left = (ox + (VB_W / 2 - visW / 2) * sc) + "px";
-    hit.style.top = (oy + (FOOT_Y - visH) * sc) + "px";
-    hit.style.width = (visW * sc) + "px";
-    hit.style.height = (visH * sc) + "px";
-    hit.style.transform = "none";
-  }
-  place();
-  app.renderer.on("resize", place);
-
-  function syncOnOff() {
-    if (!character) return;
-    character.state.timeScale = host.classList.contains("on") ? 1 : 0;
-  }
-  new MutationObserver(syncOnOff).observe(host, {
-    attributes: true, attributeFilter: ["class"]
-  });
+  var FOOT_Y = 700;
+  var BPM = 147.28, BEAT = 60 / BPM, FIRST_BEAT = 0.316;
+  var STRUM_BEATS = 2;
 
   function b64ToBytes(b64) {
     var raw = atob(b64), arr = new Uint8Array(raw.length);
@@ -912,52 +866,32 @@
     return arr;
   }
 
-  /* ===== 弹吉他循环 =====
-     底层播 Relax（抱琴姿态），这里在动画应用之后叠加骨骼变换：
-       右手小臂/手腕按节拍扫弦，四根拨弦手指依次错相拨动，琴身轻微摆动。
-     时间取音轨 currentTime，暂停时自动冻结，跳转进度也能立刻对上。 */
-  var BPM = 147.28;
-  var BEAT = 60 / BPM;
-  var FIRST_BEAT = 0.316;
-  var STRUM_BEATS = 2;          // 每 2 拍扫一次弦
-  var strumBones = null;
+  function audioPos() {
+    var v = (typeof window.__angelAudioTime === "function") ? window.__angelAudioTime() : null;
+    return (v === null || !isFinite(v)) ? null : v;
+  }
 
-  function installStrum(data) {
+  /* 吉他手：右手扫弦 + 四指依次拨动，跟音轨对时 */
+  function guitarMotion(character, host) {
     var sk = character.skeleton;
     function bone(n) { return sk.findBone(n); }
-    strumBones = {
-      arm: bone("F_R_Arm"),
-      forearm: bone("F_R_Forearm"),
-      hand: bone("F_R_Hand"),
+    var b = {
+      arm: bone("F_R_Arm"), forearm: bone("F_R_Forearm"), hand: bone("F_R_Hand"),
       lute: bone("C_Weapon3"),
-      fingers: [
-        bone("C_WeaponHand2"), bone("C_WeaponHand3"),
-        bone("C_WeaponHand4"), bone("C_WeaponHand5")
-      ]
+      fingers: [bone("C_WeaponHand2"), bone("C_WeaponHand3"), bone("C_WeaponHand4"), bone("C_WeaponHand5")]
     };
 
-    /* 注入点必须早于 skeleton.updateWorldTransform()：
-       Pixi 在 update() 内把网格顶点算完，之后改骨骼就无效了。
-       所以包装 state.apply —— 动画刚应用完、顶点还没算，正是叠加的时机。 */
     var originalApply = character.state.apply.bind(character.state);
     character.state.apply = function (skeleton) {
       originalApply(skeleton);
-      var b = strumBones;
-      if (!b || !host.classList.contains("on")) return;
+      if (!host.classList.contains("on")) return;
 
-      /* 与音轨对时：暂停自动冻结，拖动进度条也能立刻对上。
-         音频还没就绪时退回页面时钟，保证循环不会僵住。 */
-      var pos = (typeof window.__angelAudioTime === "function")
-        ? window.__angelAudioTime() : null;
-      if (pos === null || !isFinite(pos) || pos <= 0) {
-        pos = performance.now() / 1000;
-      }
+      var pos = audioPos();
+      if (pos === null || pos <= 0) pos = performance.now() / 1000;
 
       var t = Math.max(0, pos - FIRST_BEAT);
       var cycle = STRUM_BEATS * BEAT;
-      var phase = (t % cycle) / cycle;             // 0..1 一次扫弦周期
-
-      /* 下扫快、回弹慢 */
+      var phase = (t % cycle) / cycle;
       var down = Math.exp(-Math.pow((phase - 0.10) / 0.16, 2));
       var up   = Math.exp(-Math.pow((phase - 0.52) / 0.22, 2));
       var sweep = down - 0.55 * up;
@@ -967,55 +901,145 @@
       if (b.arm)     b.arm.rotation     += sweep * 2.2;
       if (b.lute)    b.lute.rotation    += sweep * 1.4;
 
-      /* 四指依次拨动：每根错开约 0.13 个周期 */
       for (var i = 0; i < b.fingers.length; i++) {
         var f = b.fingers[i];
         if (!f) continue;
         var p = phase - i * 0.13;
         if (p < 0) p += 1;
-        var pluck = Math.exp(-Math.pow((p - 0.14) / 0.10, 2));
-        f.rotation += pluck * 13;
+        f.rotation += Math.exp(-Math.pow((p - 0.14) / 0.10, 2)) * 13;
       }
-      /* 不要在这里 updateWorldTransform：SpineBase.update 紧接着会做，
-         且叠加值会由下一帧 apply 覆盖，不会累积。 */
     };
   }
 
-  var img = new Image();
-  img.onload = function () {
-    var baseTex = PIXI.BaseTexture.from(img);
-    var atlas = new PIXI.spine.TextureAtlas(
-      ANGEL_ASSETS.atlas,
-      function (pageName, done) { done(baseTex); },
-      function (atlasObj) {
-        try {
-          var bin = new PIXI.spine.SkeletonBinary(new PIXI.spine.AtlasAttachmentLoader(atlasObj));
-          var data = bin.readSkeletonData(b64ToBytes(ANGEL_ASSETS.skel));
-          character = new PIXI.spine.Spine(data);
-          root.addChild(character);
+  /* 主唱：车身随节拍轻微呼吸 + 左右小幅摆动（不做整层上下位移） */
+  function singerMotion(character, host) {
+    var sk = character.skeleton;
+    var trunk = sk.findBone("Bone") || sk.bones[1] || sk.bones[0];
 
-          var b = character.getLocalBounds();
-          baseW = b.width || 1;
-          baseH = b.height || 1;
-          character.pivot.set(b.x + baseW / 2, b.y + baseH);   // 脚底中心
-          place();
+    var originalApply = character.state.apply.bind(character.state);
+    character.state.apply = function (skeleton) {
+      originalApply(skeleton);
+      if (!host.classList.contains("on") || !trunk) return;
 
-          /* Relax：站着抱琴、自带拨弦手指动作，且不带树/灌木等场景道具 */
-          var names = data.animations.map(function (a) { return a.name; });
-          var pick = names.indexOf("Relax") >= 0 ? "Relax" : (names.filter(function (n) { return n !== "Default"; })[0] || names[0]);
-          character.state.setAnimation(0, pick, true);
-          installStrum(data);
-          syncOnOff();
-        } catch (e) {
-          warn("骨骼解析失败：" + (e && e.message ? e.message : e));
-          console.error(e);
-        }
+      var pos = audioPos();
+      if (pos === null || pos <= 0) pos = performance.now() / 1000;
+
+      var t = Math.max(0, pos - FIRST_BEAT);
+      var phase = (t % BEAT) / BEAT;                 // 每拍一次
+      var pulse = Math.sin(phase * Math.PI);          // 0..1..0
+
+      trunk.scaleX *= 1 + 0.012 * pulse;
+      trunk.scaleY *= 1 - 0.008 * pulse;
+      trunk.rotation += 0.7 * (pulse - 0.5);          // 轻微左右摆
+    };
+  }
+
+  function createCharacter(cfg) {
+    var host = document.getElementById(cfg.el);
+    if (!host) return;
+    var holder = host.querySelector(".bobber");
+    var hit = host.querySelector(".hit");
+    var assets = window[cfg.assets];
+    if (!assets) { warn("角色资源缺失：" + cfg.assets); return; }
+
+    var app = new PIXI.Application({
+      resizeTo: host,
+      backgroundAlpha: 0,
+      antialias: true,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      autoDensity: true
+    });
+    holder.appendChild(app.view);
+
+    var root = new PIXI.Container();
+    app.stage.addChild(root);
+
+    var character = null, baseW = 1, baseH = 1;
+
+    function place() {
+      var W = app.screen.width, H = app.screen.height;
+      var sc = Math.max(W / VB_W, H / VB_H);
+      var ox = (W - VB_W * sc) / 2;
+      var oy = H - VB_H * sc;
+      root.scale.set(sc);
+      root.position.set(ox, oy);
+
+      if (character) {
+        character.scale.set(cfg.charH / baseH);
+        /* 有些角色的 bounds 被远处附件撑大，可见部分不在 bounds 中心，
+           用 shiftXRatio 把偏移补回来，保证可见车身落在 cfg.x */
+        var shiftX = (cfg.shiftXRatio || 0) * cfg.charH;
+        character.position.set(cfg.x + shiftX, FOOT_Y);
       }
-    );
-    if (!atlas.pages.length) warn("图集里没有贴图页");
-  };
-  img.onerror = function () { warn("角色贴图解码失败"); };
-  img.src = "data:image/png;base64," + ANGEL_ASSETS.png;
+
+      var visH = cfg.charH * cfg.visRatio;
+      var visW = cfg.charH * baseW / baseH * cfg.visWFactor;
+      hit.style.left = (ox + (cfg.x - visW / 2) * sc) + "px";
+      hit.style.top = (oy + (FOOT_Y - visH) * sc) + "px";
+      hit.style.width = (visW * sc) + "px";
+      hit.style.height = (visH * sc) + "px";
+    }
+    place();
+    app.renderer.on("resize", place);
+
+    function syncOnOff() {
+      if (!character) return;
+      character.state.timeScale = host.classList.contains("on") ? 1 : 0;
+    }
+    new MutationObserver(syncOnOff).observe(host, { attributes: true, attributeFilter: ["class"] });
+
+    var img = new Image();
+    img.onload = function () {
+      var baseTex = PIXI.BaseTexture.from(img);
+      var atlas = new PIXI.spine.TextureAtlas(
+        assets.atlas,
+        function (pageName, done) { done(baseTex); },
+        function (atlasObj) {
+          try {
+            var bin = new PIXI.spine.SkeletonBinary(new PIXI.spine.AtlasAttachmentLoader(atlasObj));
+            var data = bin.readSkeletonData(b64ToBytes(assets.skel));
+            character = new PIXI.spine.Spine(data);
+            root.addChild(character);
+
+            var b = character.getLocalBounds();
+            baseW = b.width || 1;
+            baseH = b.height || 1;
+            character.pivot.set(b.x + baseW / 2, b.y + baseH);
+            place();
+
+            var names = data.animations.map(function (a) { return a.name; });
+            var pick = names.indexOf(cfg.anim) >= 0
+              ? cfg.anim
+              : (names.filter(function (n) { return n !== "Default"; })[0] || names[0]);
+            character.state.setAnimation(0, pick, true);
+
+            if (cfg.motion) cfg.motion(character, host);
+            syncOnOff();
+          } catch (e) {
+            warn("骨骼解析失败：" + cfg.el + "：" + (e && e.message ? e.message : e));
+            console.error(e);
+          }
+        }
+      );
+      if (!atlas.pages.length) warn("图集里没有贴图页：" + cfg.el);
+    };
+    img.onerror = function () { warn("角色贴图解码失败：" + cfg.el); };
+    img.src = "data:image/png;base64," + assets.png;
+  }
+
+  /* 站位：舞台中线 800，吉他手在右，主唱在左 */
+  createCharacter({
+    el: "angel", assets: "ANGEL_ASSETS", anim: "Relax",
+    x: 830, charH: 720, visRatio: 0.42, visWFactor: 0.30,
+    motion: guitarMotion
+  });
+
+  createCharacter({
+    el: "phonor", assets: "PHONOR_ASSETS", anim: "Special",
+    x: 500, charH: 336, visRatio: 0.895, visWFactor: 0.89,
+    shiftXRatio: 0.9965,   /* 实测：bounds 中心比车身偏右约 1 个身高 */
+    motion: singerMotion
+  });
 })();
 </script>
 </body>
