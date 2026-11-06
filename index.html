@@ -4,13 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>GitStudy-AngelBand · 西部舞台 v2.4.1</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.5.0</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #0b0710; }
 
   .stage { position: fixed; inset: 0; overflow: hidden; }
-  .scene { width: 100%; height: 100%; display: block; }
+  .scene { width: 100%; height: 100%; display: block; position: relative; z-index: 1; }
+
+  /* 背景幕布：铺满整屏，撑满裁切，压在最底层。
+     轻微虚焦 + 压暗，把它推到远处，矢量道具才站得住 */
+  .backdrop {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: 50% 100%;
+    z-index: 0;
+    pointer-events: none;
+    filter: saturate(1.04) brightness(.9) blur(1px);
+    transform: scale(1.015);
+  }
 
   /* 暗角，让舞台中心更聚焦 */
   .vignette {
@@ -224,11 +237,104 @@
     transition: opacity .5s;
   }
   .hint.gone { opacity: 0; }
+
+  /* ===== 全员开演按钮：不是圆形，改成胶囊 ===== */
+  .player #allBtn {
+    width: auto;
+    height: 30px;
+    padding: 0 15px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: #ffd7a6;
+    background: rgba(255, 170, 90, .09);
+    border-color: rgba(255, 190, 120, .26);
+  }
+  .player #allBtn:hover { background: rgba(255, 170, 90, .2); }
+  .player #allBtn.on {
+    color: #fff0dc;
+    background: rgba(255, 170, 90, .26);
+    border-color: rgba(255, 190, 120, .5);
+  }
+
+  /* ===== 开场帷幕 =====
+     两块丝绒幕布，按住往任意一边拖就分开；拖得够远松手自动开到底，
+     点一下也能直接拉开。开完从 DOM 里摘掉，不再挡点击。 */
+  .curtain {
+    position: absolute; inset: 0; z-index: 30;
+    cursor: grab;
+    touch-action: none;
+    overflow: hidden;
+  }
+  .curtain.dragging { cursor: grabbing; }
+  .curtain.gone { display: none; }
+
+  .curtain .half {
+    position: absolute; top: 0; bottom: 0;
+    width: 51%;
+    will-change: transform;
+    background:
+      linear-gradient(90deg,
+        #150105 0%, #3d0409 5%, #6d0f1a 11%, #2f0307 17%,
+        #5c0a13 24%, #861723 31%, #39030a 38%, #6a0d18 46%,
+        #300409 54%, #781220 62%, #8b1824 70%, #41050c 78%,
+        #250306 86%, #120104 100%);
+    box-shadow:
+      inset 0 0 120px rgba(0, 0, 0, .8),
+      inset 0 -140px 120px -80px rgba(0, 0, 0, .75);
+  }
+  .curtain .half.left  { left: 0; }
+  .curtain .half.right { right: 0; }
+  /* 幕布下摆的金色滚边 */
+  .curtain .half::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
+    background: linear-gradient(180deg, rgba(226, 176, 96, .55), rgba(120, 74, 24, .35));
+  }
+  /* 两片幕布合拢时的接缝高光 */
+  .curtain .half.left::before,
+  .curtain .half.right::before {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, rgba(255, 190, 120, .18), transparent 70%);
+  }
+  .curtain .half.left::before  { right: 0; }
+  .curtain .half.right::before { left: 0; }
+
+  /* 顶部固定帷幔：一条横带 + 一排下垂的扇形 */
+  .curtain .valance {
+    position: absolute; left: -2%; right: -2%; top: 0; height: 122px;
+    background:
+      linear-gradient(180deg, rgba(226, 176, 96, .42), rgba(226, 176, 96, .42)) 0 55px / 100% 2px no-repeat,
+      radial-gradient(circle at 50% 0, #4d0812 0 43px, rgba(77, 8, 18, 0) 44px) 0 57px / 86px 86px repeat-x,
+      linear-gradient(180deg, #38050d, #4d0812) 0 0 / 100% 57px no-repeat;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .55);
+    pointer-events: none;
+  }
+
+  .curtain .tip {
+    position: absolute; left: 50%; top: 52%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    color: rgba(255, 228, 196, .9);
+    text-shadow: 0 2px 16px rgba(0, 0, 0, .95), 0 0 32px rgba(255, 170, 90, .25);
+  }
+  .curtain .tip b {
+    display: block;
+    font-size: 19px; font-weight: 500; letter-spacing: 12px;
+    margin-bottom: 12px;
+    animation: tipPulse 2.6s ease-in-out infinite;
+  }
+  .curtain .tip span {
+    font-size: 12px; letter-spacing: 4px; color: rgba(255, 210, 165, .62);
+  }
+  @keyframes tipPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 </style>
 </head>
 <body>
 
 <div class="stage">
+  <!-- 背景幕布：手绘西部黄昏（AI 生成的画布），矢量道具压在它上面 -->
+  <img class="backdrop" src="art/backdrop.png" alt="">
   <svg class="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
@@ -252,9 +358,19 @@
       </radialGradient>
 
       <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#3a1d22"/>
-        <stop offset="45%"  stop-color="#22111a"/>
-        <stop offset="100%" stop-color="#0e0710"/>
+        <stop offset="0%"   stop-color="#2a1420" stop-opacity="0"/>
+        <stop offset="26%"  stop-color="#1d0f1c" stop-opacity=".8"/>
+        <stop offset="62%"  stop-color="#120a14" stop-opacity=".96"/>
+        <stop offset="100%" stop-color="#0b0610"/>
+      </linearGradient>
+
+      <!-- 压在画出来的背景幕布上的一层紫调，让绘画和矢量道具能接得上 -->
+      <linearGradient id="skyTint" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#0b0518" stop-opacity=".72"/>
+        <stop offset="34%"  stop-color="#200d2c" stop-opacity=".46"/>
+        <stop offset="62%"  stop-color="#43162c" stop-opacity=".24"/>
+        <stop offset="84%"  stop-color="#8a3a2c" stop-opacity=".12"/>
+        <stop offset="100%" stop-color="#d0713c" stop-opacity=".04"/>
       </linearGradient>
 
       <linearGradient id="deckTop" x1="0" y1="0" x2="0" y2="1">
@@ -280,8 +396,8 @@
       </radialGradient>
     </defs>
 
-    <!-- 天空 -->
-    <rect x="0" y="0" width="1600" height="560" fill="url(#sky)"/>
+    <!-- 天空：现在是"压在画布背景上的一层紫调"，用来统一色调、压暗远景 -->
+    <rect x="0" y="0" width="1600" height="560" fill="url(#skyTint)"/>
 
     <!-- 星星 -->
     <g fill="#ffe6c4">
@@ -312,18 +428,9 @@
       </g>
     </g>
 
-    <!-- 落日 -->
-    <circle class="glow" cx="1150" cy="470" r="300" fill="url(#sunGlow)"/>
-    <circle cx="1150" cy="482" r="86" fill="url(#sunDisc)" opacity=".95"/>
+    <!-- 落日 / 远山 / 岩脊 都交给背景画布了，这里不再重复画 -->
 
-    <!-- 远山台地 -->
-    <path d="M0,540 L0,452 L96,452 L152,414 L238,414 L300,452 L404,452 L470,424 L548,424 L616,458 L742,458 L828,418 L920,418 L1000,452 L1108,452 L1192,410 L1284,410 L1364,448 L1472,448 L1544,420 L1600,420 L1600,540 Z"
-          fill="#2e1a33" opacity=".92"/>
-    <!-- 近处岩脊 -->
-    <path d="M0,556 L0,516 L104,516 L164,492 L236,492 L292,518 L398,518 L470,500 L560,500 L628,524 L760,524 L844,496 L944,496 L1024,522 L1140,522 L1220,494 L1316,494 L1388,520 L1496,520 L1560,500 L1600,500 L1600,556 Z"
-          fill="#1d1026"/>
-
-    <!-- 地面 -->
+    <!-- 地面：顶部淡出，让画布里的荒原透出来，越靠近舞台越暗 -->
     <rect x="0" y="540" width="1600" height="360" fill="url(#groundGrad)"/>
     <ellipse cx="800" cy="770" rx="700" ry="96" fill="#0a050c" opacity=".55"/>
 
@@ -522,7 +629,7 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">GitStudy-AngelBand · v2.4.1 · 西部舞台</div>
+  <div class="tag">GitStudy-AngelBand · v2.5.0 · 西部舞台</div>
 
   <div class="hint" id="hint">点 击 乐 手 ， 让 他 们 一 个 个 上 场</div>
 
@@ -531,6 +638,18 @@
     <span class="time" id="curTime">0:00</span>
     <input id="seek" type="range" min="0" max="100" step="0.05" value="0" aria-label="播放进度">
     <span class="time" id="durTime">–:––</span>
+    <button id="allBtn" type="button" title="一键全员上下场">全部开演</button>
+  </div>
+
+  <!-- 开场帷幕：拖开才看见舞台 -->
+  <div class="curtain" id="curtain">
+    <div class="half left"></div>
+    <div class="half right"></div>
+    <div class="valance"></div>
+    <div class="tip">
+      <b>拉 开 帷 幕</b>
+      <span>按住 · 左右拖动</span>
+    </div>
   </div>
 </div>
 
@@ -595,6 +714,21 @@
     return a.length ? a[0].audio.currentTime : null;
   };
 
+  /* 单文件发行版把四条音轨以 base64 内嵌在 window.EMBED_AUDIO 里，
+     直接解成 Blob，不经过网络；普通版还是读同目录的 mp3 */
+  function loadTrackBlob(src) {
+    var emb = window.EMBED_AUDIO && window.EMBED_AUDIO[src];
+    if (emb) {
+      var raw = atob(emb), bytes = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      return Promise.resolve(new Blob([bytes], { type: "audio/mpeg" }));
+    }
+    return fetch(src).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.blob();
+    });
+  }
+
   function waitMetadata(m) {
     return new Promise(function (resolve) {
       if (m.audio.readyState >= 1) return resolve();
@@ -614,11 +748,7 @@
 
     /* 预览服务器不支持 HTTP Range，直接给 URL 会导致 currentTime 跳不动。
        把整段音频读进内存做成 Blob URL，浏览器就能任意定位。 */
-    m.ready = fetch(m.src)
-      .then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.blob();
-      })
+    m.ready = loadTrackBlob(m.src)
       .then(function (blob) {
         m.audio.src = URL.createObjectURL(blob);
         m.audio.load();
@@ -819,6 +949,7 @@
       playBtn.textContent = (transport === "playing") ? "❚❚" : "▶";
     }
     durTime.textContent = duration ? fmt(duration) : "–:––";
+    syncAllBtn();
   }
 
   /* ---------- 节拍网格 ----------
@@ -888,6 +1019,89 @@
     if (!active().length) setMonster(MONSTERS[0], true);   // 没人上场时默认请吉他手开演
     startTransport();
   });
+
+  /* ---------- 一键全员上下场 ---------- */
+  var allBtn = document.getElementById("allBtn");
+
+  function syncAllBtn() {
+    if (!allBtn) return;
+    var all = active().length === MONSTERS.length;
+    allBtn.textContent = all ? "全部停演" : "全部开演";
+    allBtn.classList.toggle("on", all);
+  }
+
+  if (allBtn) {
+    allBtn.addEventListener("click", function () {
+      if (active().length === MONSTERS.length) {
+        MONSTERS.forEach(function (m) { if (m.on) setMonster(m, false); });
+      } else {
+        MONSTERS.forEach(function (m) { if (!m.on) setMonster(m, true); });
+        /* 已经在演的时候别重复 startTransport，否则正在响的人也会被重新淡入一次 */
+        if (transport !== "playing") startTransport();
+      }
+      syncAllBtn();
+    });
+    syncAllBtn();
+  }
+
+  /* ---------- 开场帷幕 ----------
+     两块幕布按住往任意一边拖就分开，幅度跟着鼠标走；
+     松手时超过 1/3 就自动开到底，否则弹回去。点一下也能直接拉开。 */
+  (function () {
+    var curtain = document.getElementById("curtain");
+    if (!curtain) return;
+    var L = curtain.querySelector(".half.left");
+    var R = curtain.querySelector(".half.right");
+    var tip = curtain.querySelector(".tip");
+    var d = 0, dragging = false, x0 = 0, moved = 0, busy = false;
+
+    function paint(v) {
+      d = v < 0 ? 0 : (v > 1 ? 1 : v);
+      L.style.transform = "translateX(" + (-d * 101) + "%)";
+      R.style.transform = "translateX(" + (d * 101) + "%)";
+      if (tip) tip.style.opacity = String(Math.max(0, 1 - d * 2.4));
+    }
+
+    function settle(to) {
+      busy = true;
+      var ease = "transform .95s cubic-bezier(.22,.86,.18,1)";
+      L.style.transition = ease;
+      R.style.transition = ease;
+      paint(to);
+      window.setTimeout(function () {
+        if (to >= 1) curtain.classList.add("gone");   /* 开完就不挡点击了 */
+        else busy = false;
+      }, 980);
+    }
+
+    curtain.addEventListener("pointerdown", function (e) {
+      if (busy) return;
+      dragging = true;
+      moved = 0;
+      x0 = e.clientX;
+      curtain.classList.add("dragging");
+      L.style.transition = "none";
+      R.style.transition = "none";
+      try { curtain.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    curtain.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var dx = e.clientX - x0;
+      if (Math.abs(dx) > moved) moved = Math.abs(dx);
+      paint(Math.abs(dx) / (window.innerWidth * 0.32));
+    });
+
+    function release() {
+      if (!dragging) return;
+      dragging = false;
+      curtain.classList.remove("dragging");
+      if (moved < 6) settle(1);          /* 没拖动 = 点了一下，直接开 */
+      else settle(d > 0.32 ? 1 : 0);
+    }
+    curtain.addEventListener("pointerup", release);
+    curtain.addEventListener("pointercancel", release);
+  })();
 
   /* ---------- 主循环：进度、点头、乐队对表，全部读同一时钟 ---------- */
   function frame() {

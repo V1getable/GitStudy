@@ -6,7 +6,7 @@ Support for Git teaching
 
 一个用于**版本控制教学**的音乐小游戏：每提交一个新版本，舞台上就多一位乐手。每位乐手控制一条音轨，可以单独开关；几位同时开演，就凑成一支完整的乐队。
 
-当前版本 **v2.4.1**，舞台上有四位乐手：
+当前版本 **v2.5.0**，舞台上有四位乐手：
 
 | 角色 | 位置 | 音轨 | 演出动作 |
 | ---- | ---- | ---- | -------- |
@@ -45,12 +45,23 @@ Support for Git teaching
 
 有个连带改动：退场既然要先淡 0.3 秒再停，"停下的位置"就必须在**淡出结束那一刻**才记进 `pendingPos`，否则会比实际停下的点早 0.3 秒。
 
+### 背景是一块画出来的幕布
+
+远处的落日、层叠台地、火烧云不是矢量的，是一张 AI 生成的画布画（`art/backdrop.png`），铺在最底层；酒馆、木台、灯柱、仙人掌这些需要和角色咬合的物件仍然是 SVG。为了不让绘画抢戏，画布被压暗、去饱和、加了 1px 虚焦推到远处，上面再压一层紫调渐变（`#skyTint`）把颜色拉回原来的紫红夕照；地面层则从顶端透明渐变到近处近乎全黑，让画布里的荒原透出来又不影响木台的对比度。
+
+生成用的提示词：
+
+> Wide panoramic matte painting of a Wild West desert at dusk, designed as a hand-painted theater backdrop. A huge low sun sits in the right third of the frame, half sunk behind a distant mesa. Layered sandstone buttes and flat-topped mesas recede into atmospheric haze along a horizon line at about 60% of the image height, each layer paler and bluer with distance. Dramatic streaked clouds in deep plum, magenta and burnt orange, catching warm rim light from the sunset; a few birds circling high in the sky. The lower third is a dark desert plain fading almost to silhouette, empty and uncluttered, with sparse dry brush. Painterly hand-painted backdrop feel, soft airbrushed gradients, matte finish, rich saturated dusk palette (deep purple #1a0b20, plum #4a1638, burnt sienna #b54a2c, amber #e08a3c, warm highlight #ffd9a0). No text, no lettering, no people, no animals, no buildings, no watermark.
+
+（生成结果右下角带水印，导入时把底部裁掉了 82px；正好那块区域本来也被地面层盖住。）
+
 ## 怎么玩
 
-1. 打开 `index.html`（或部署到 GitHub Pages 在线玩）
-2. 点击台上的乐手，开关他/她的音轨
-3. 拖动底部进度条跳到任意位置，或按播放键控制走带
-4. 四位一起开演，听完整编曲
+1. 打开 `index.html`（或部署到 GitHub Pages 在线玩）—— 先看到一块红丝绒帷幕
+2. **按住左右拖动**把它拉开（点一下也行），舞台才露出来
+3. 点击台上的乐手，开关他/她的音轨；或者按右下角的 **「全部开演」** 一键全员上场（再点变成「全部停演」）
+4. 拖动底部进度条跳到任意位置，或按播放键控制走带
+5. 四位一起开演，听完整编曲
 
 乐手上下场都有 0.3~0.5 秒的音量淡入淡出，不会硬切。退场只是停下来，**演奏位置不会清零**：再点他/她上场，或者按播放键，都从刚才停下的地方接着演。退场的乐手是完全静止的，不会跟着别人的音轨做动作。
 
@@ -59,6 +70,8 @@ Support for Git teaching
 ```
 index.html          主页面：西部舞台 + 乐手 + 播放条
 spine-preview.html  角色调试页：单独看吉他手，切换全部 7 个动画
+art/backdrop.png    背景幕布（AI 生成的绘画，压暗虚焦后垫在最底层）
+tools/build_single.py  打包脚本：产出一个可单发的单文件 HTML
 spine/              角色资源
   angel.*           吉他手（.skel / .atlas / .png）
   phonor.*          主唱唱片小车
@@ -72,6 +85,26 @@ drums.mp3           鼓组音轨
 ```
 
 角色是 Spine **3.8.99 二进制**格式，用 PixiJS v7 + pixi-spine 3.8 渲染。因为预览服务器不放行 `.skel` / `.atlas` 后缀，资源已打包成 `spine/lib/*-assets.js`（base64 内嵌），这样本地双击打开也不会被 CORS 拦住。
+
+## 单文件发行版
+
+想直接发给别人（而不是让对方 clone 仓库），可以打成**一个 HTML 文件**，双击就能玩、断网也能玩：
+
+```bash
+python tools/build_single.py     # 需要 pillow / lameenc / miniaudio
+```
+
+它会把四样东西塞进同一个文件：
+
+| 内容 | 处理方式 |
+| ---- | -------- |
+| PixiJS、pixi-spine、四份骨骼资源 | 原本就是外部 `<script>`，直接内联 |
+| 背景幕布 `art/backdrop.png` | 转成 JPEG(q85) 的 data URI，1.9 MB → 176 KB |
+| 四条音轨（各 15 MB / 320 kbps） | 重编码成 128 kbps 再 base64，4×6 MB |
+
+成品约 **37 MB**（原始素材 66 MB），输出在 `release/` 下。这个目录不进 Git —— 单文件产物应该作为 GitHub Release 的附件上传，而不是塞进仓库历史里。
+
+代码里对应的小改动：音轨统一走 `loadTrackBlob()`，发现 `window.EMBED_AUDIO` 里对应名字就直接 base64 解成 Blob，否则照旧 `fetch` 同目录的 mp3。所以同一个 `index.html` 既能当普通版跑，也能被脚本打成单文件版。
 
 ## 版本日志
 
@@ -88,6 +121,7 @@ drums.mp3           鼓组音轨
 | v2.3.0 | 贝斯手登场，四支号里选了萨克斯，悬在嘴边随拍送气 |
 | v2.4.0 | 鼓手登场，鼓从太鼓角色那儿借来，第 3 拍自己飞过来砸她脑袋，每次换一张随机表情 |
 | v2.4.1 | 上场/退场/暂停全部加音量缓入缓出，新乐手插进合奏不再突兀 |
+| v2.5.0 | 开场加红丝绒帷幕（拖开才开演）、加「全部开演」一键按钮、背景换成 AI 生成的画布幕布 |
 
 ## 版本控制小课堂
 
