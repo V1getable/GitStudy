@@ -2,15 +2,26 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>GitStudy-AngelBand · 西部舞台 v2.5.0</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.6.0</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; background: #0b0710; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; height: 100dvh;
+    overflow: hidden; background: #0b0710;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+  }
 
   .stage { position: fixed; inset: 0; overflow: hidden; }
-  .scene { width: 100%; height: 100%; display: block; position: relative; z-index: 1; }
+  /* 高度由 JS 设：竖屏时给播放条让出一条，舞台整体上移 */
+  .scene { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; z-index: 1; }
+  /* 竖屏专用：把 SVG 上半截（天空）渐隐，露出背后的画布 */
+  .scene.fade-top {
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) var(--fade0, 0px), #000 var(--fade1, 100px));
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0) var(--fade0, 0px), #000 var(--fade1, 100px));
+  }
 
   /* 背景幕布：铺满整屏，撑满裁切，压在最底层。
      轻微虚焦 + 压暗，把它推到远处，矢量道具才站得住 */
@@ -27,7 +38,7 @@
 
   /* 暗角，让舞台中心更聚焦 */
   .vignette {
-    position: absolute; inset: 0; pointer-events: none;
+    position: absolute; inset: 0; pointer-events: none; z-index: 1;
     background: radial-gradient(ellipse at 50% 62%, transparent 45%, rgba(6,3,10,.55) 100%);
   }
 
@@ -60,7 +71,7 @@
 
   /* 版本角标 */
   .tag {
-    position: absolute; left: 22px; bottom: 18px;
+    position: absolute; z-index: 4; left: 22px; bottom: 18px;
     font: 12px/1.5 "Cascadia Code", Consolas, monospace;
     letter-spacing: 1px;
     color: rgba(255, 214, 170, .42);
@@ -227,6 +238,7 @@
 
   .hint {
     position: absolute;
+    z-index: 4;
     left: 50%;
     bottom: 92px;
     transform: translateX(-50%);
@@ -328,6 +340,89 @@
     font-size: 12px; letter-spacing: 4px; color: rgba(255, 210, 165, .62);
   }
   @keyframes tipPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+  /* ===== 竖屏提示 =====
+     舞台是 16:9 的，竖屏怎么摆都小；先劝一句横屏，愿意竖着看也能继续。 */
+  .rotate {
+    position: absolute; inset: 0; z-index: 26;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 24px;
+    background: rgba(8, 4, 12, .74);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .rotate.show { display: flex; }
+  .rotate .card {
+    width: min(320px, 84vw);
+    padding: 26px 22px 20px;
+    border-radius: 18px;
+    text-align: center;
+    color: #ffe6c8;
+    background: linear-gradient(180deg, rgba(58, 12, 22, .96), rgba(26, 8, 14, .96));
+    border: 1px solid rgba(255, 190, 120, .28);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+  }
+  .rotate .phone {
+    width: 46px; height: 84px;
+    margin: 0 auto 20px;
+    border-radius: 9px;
+    border: 2px solid rgba(255, 200, 150, .75);
+    position: relative;
+    animation: tilt 2.8s ease-in-out infinite;
+  }
+  .rotate .phone::before {
+    content: ""; position: absolute; left: 50%; top: 6px;
+    width: 16px; height: 3px; margin-left: -8px;
+    border-radius: 2px; background: rgba(255, 200, 150, .6);
+  }
+  @keyframes tilt {
+    0%, 28%   { transform: rotate(0deg); }
+    62%, 100% { transform: rotate(-90deg); }
+  }
+  .rotate b {
+    display: block; font-size: 16px; font-weight: 500;
+    letter-spacing: 6px; margin-bottom: 10px;
+  }
+  .rotate p {
+    font-size: 12.5px; line-height: 1.75;
+    color: rgba(255, 214, 180, .62); margin-bottom: 18px;
+  }
+  .rotate button {
+    border: 1px solid rgba(255, 190, 120, .32);
+    background: rgba(255, 170, 90, .1);
+    color: #ffcf9a;
+    font-size: 12.5px; letter-spacing: 1px;
+    padding: 10px 20px; border-radius: 999px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  /* ===== 小屏适配 ===== */
+  @media (max-width: 820px) {
+    /* 手机上把虚焦去掉，一层全屏 blur 太吃 GPU */
+    .backdrop { filter: saturate(1.04) brightness(.9); }
+  }
+
+  @media (max-width: 560px), (max-height: 480px) {
+    .player {
+      width: calc(100% - 20px);
+      gap: 7px;
+      padding: 6px 10px;
+      bottom: max(10px, env(safe-area-inset-bottom));
+    }
+    .player button { width: 34px; height: 34px; font-size: 12px; }
+    .player #allBtn { height: 27px; padding: 0 9px; font-size: 11px; letter-spacing: 0; }
+    .player .time { min-width: 30px; font-size: 11px; }
+    .hint {
+      bottom: 68px; font-size: 11px; letter-spacing: 1px;
+      width: max-content; max-width: calc(100% - 20px); white-space: nowrap;
+    }
+    /* 演奏条占住底部，版本号挪到左上角，别被压住 */
+    .tag { left: 12px; top: 10px; bottom: auto; font-size: 10px; }
+    .curtain .tip b { font-size: 15px; letter-spacing: 6px; }
+    .curtain .tip span { font-size: 10px; letter-spacing: 2px; }
+    .curtain .valance { height: 70px; }
+  }
 </style>
 </head>
 <body>
@@ -629,7 +724,7 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">GitStudy-AngelBand · v2.5.0 · 西部舞台</div>
+  <div class="tag">GitStudy-AngelBand · v2.6.0 · 西部舞台</div>
 
   <div class="hint" id="hint">点 击 乐 手 ， 让 他 们 一 个 个 上 场</div>
 
@@ -639,6 +734,16 @@
     <input id="seek" type="range" min="0" max="100" step="0.05" value="0" aria-label="播放进度">
     <span class="time" id="durTime">–:––</span>
     <button id="allBtn" type="button" title="一键全员上下场">全部开演</button>
+  </div>
+
+  <!-- 竖屏提示 -->
+  <div class="rotate" id="rotate">
+    <div class="card">
+      <div class="phone"></div>
+      <b>横 屏 更 好 看</b>
+      <p>舞台是 16:9 的宽幅画面<br>横过来才装得下整支乐队</p>
+      <button id="stayPortrait" type="button">仍然竖屏</button>
+    </div>
   </div>
 
   <!-- 开场帷幕：拖开才看见舞台 -->
@@ -1054,6 +1159,36 @@
     var R = curtain.querySelector(".half.right");
     var tip = curtain.querySelector(".tip");
     var d = 0, dragging = false, x0 = 0, moved = 0, busy = false;
+    var curtainOpened = false, stayPortrait = false;
+
+    /* 竖屏且屏幕不够宽时劝一句横屏。它只劝一次：
+       点"仍然竖屏"、点卡片外面、或者干等 6.5 秒，都自动让路，别把人堵在门口 */
+    var rotateTimer = 0;
+    function dismissRotate() {
+      stayPortrait = true;
+      window.clearTimeout(rotateTimer);
+      syncRotateTip();
+    }
+    function syncRotateTip() {
+      var box = document.getElementById("rotate");
+      if (!box) return;
+      var portrait = window.innerHeight > window.innerWidth * 1.15;
+      var need = curtainOpened && portrait && window.innerWidth < 820 && !stayPortrait;
+      box.classList.toggle("show", need);
+      if (need && !rotateTimer) rotateTimer = window.setTimeout(dismissRotate, 6500);
+      if (!need) window.clearTimeout(rotateTimer);
+    }
+
+    var stay = document.getElementById("stayPortrait");
+    if (stay) stay.addEventListener("click", dismissRotate);
+    var rotateBox = document.getElementById("rotate");
+    if (rotateBox) rotateBox.addEventListener("pointerdown", function (e) {
+      if (e.target === rotateBox) dismissRotate();   /* 点卡片外面也算"知道了" */
+    });
+    window.addEventListener("resize", syncRotateTip);
+    window.addEventListener("orientationchange", function () {
+      window.setTimeout(syncRotateTip, 260);   /* 转屏后尺寸要等一拍才更新 */
+    });
 
     function paint(v) {
       d = v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -1069,8 +1204,11 @@
       R.style.transition = ease;
       paint(to);
       window.setTimeout(function () {
-        if (to >= 1) curtain.classList.add("gone");   /* 开完就不挡点击了 */
-        else busy = false;
+        if (to >= 1) {
+          curtain.classList.add("gone");   /* 开完就不挡点击了 */
+          curtainOpened = true;
+          syncRotateTip();
+        } else busy = false;
       }, 980);
     }
 
@@ -1169,6 +1307,13 @@
   /* 舞台 SVG: viewBox 1600x900 + xMidYMax slice —— 角色共用这套坐标系 */
   var VB_W = 1600, VB_H = 900;
   var FOOT_Y = 700;
+
+  /* 窗口布局：人数多、舞台宽，横屏直接铺满；
+     竖屏只能按宽度缩进去，下面还给播放条留一条。 */
+  var PLAYERS = [];        // 每个角色的 place()，窗口一变统一重排
+  var barSpacePx = 0;      // 竖屏时为播放条让出的高度
+
+  function isPortrait() { return window.innerHeight > window.innerWidth * 1.15; }
   var BPM = 147.28, BEAT = 60 / BPM, FIRST_BEAT = 0.316;
   var STRUM_BEATS = 2;
 
@@ -1494,7 +1639,7 @@
       resizeTo: host,
       backgroundAlpha: 0,
       antialias: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: Math.min(window.devicePixelRatio || 1, window.innerWidth < 820 ? 1.5 : 2),
       autoDensity: true
     });
     holder.appendChild(app.view);
@@ -1506,9 +1651,14 @@
 
     function place() {
       var W = app.screen.width, H = app.screen.height;
-      var sc = Math.max(W / VB_W, H / VB_H);
+      var portrait = isPortrait();
+      var usableH = Math.max(120, H - barSpacePx);
+      /* 横屏铺满（cover）；竖屏按宽度装进去（contain）并贴着播放条上方 */
+      var sc = portrait
+        ? Math.min(W / VB_W, usableH / VB_H)
+        : Math.max(W / VB_W, H / VB_H);
       var ox = (W - VB_W * sc) / 2;
-      var oy = H - VB_H * sc;
+      var oy = portrait ? usableH - VB_H * sc : H - VB_H * sc;
       root.scale.set(sc);
       root.position.set(ox, oy);
 
@@ -1529,6 +1679,7 @@
     }
     place();
     app.renderer.on("resize", place);
+    PLAYERS.push(place);
 
     function syncOnOff() {
       if (!character) return;
@@ -1649,6 +1800,45 @@
     shiftXRatio: 0.9965,   /* 实测：bounds 中心比车身偏右约 1 个身高 */
     motion: singerMotion
   });
+  /* ---------- 窗口/转屏时重排：SVG 与四个 Pixi 舞台共用同一套变换 ---------- */
+  function relayout() {
+    var portrait = isPortrait();
+    barSpacePx = 0;
+    if (portrait) {
+      var bar = document.querySelector(".player");
+      if (bar) {
+        var r = bar.getBoundingClientRect();
+        barSpacePx = Math.max(0, Math.round(window.innerHeight - r.top + 12));
+      }
+    }
+    var scene = document.querySelector(".scene");
+    if (scene) {
+      var sceneH = Math.max(0, window.innerHeight - barSpacePx);
+      scene.style.height = sceneH + "px";
+      scene.setAttribute("preserveAspectRatio", portrait ? "xMidYMax meet" : "xMidYMax slice");
+      /* 竖屏是"装箱"缩放，SVG 只占下面一条，它自带的那层暗天空会硬切在画布上。
+         这里把 SVG 的天空渐变到透明，让画出来的幕布接管上半屏。 */
+      if (portrait) {
+        var sc = Math.min(window.innerWidth / VB_W, sceneH / VB_H);
+        var top = sceneH - VB_H * sc;
+        scene.style.setProperty("--fade0", Math.max(0, top - 2) + "px");
+        scene.style.setProperty("--fade1", Math.round(top + VB_H * 0.62 * sc) + "px");
+        scene.classList.add("fade-top");
+      } else {
+        scene.classList.remove("fade-top");
+      }
+    }
+    for (var i = 0; i < PLAYERS.length; i++) PLAYERS[i]();
+  }
+  relayout();
+
+  window.addEventListener("resize", relayout);
+  window.addEventListener("orientationchange", function () {
+    window.setTimeout(relayout, 260);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", relayout);
+  }
 })();
 </script>
 </body>

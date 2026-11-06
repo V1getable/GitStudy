@@ -6,7 +6,7 @@ Support for Git teaching
 
 一个用于**版本控制教学**的音乐小游戏：每提交一个新版本，舞台上就多一位乐手。每位乐手控制一条音轨，可以单独开关；几位同时开演，就凑成一支完整的乐队。
 
-当前版本 **v2.5.0**，舞台上有四位乐手：
+当前版本 **v2.6.0**，舞台上有四位乐手：
 
 | 角色 | 位置 | 音轨 | 演出动作 |
 | ---- | ---- | ---- | -------- |
@@ -54,6 +54,27 @@ Support for Git teaching
 > Wide panoramic matte painting of a Wild West desert at dusk, designed as a hand-painted theater backdrop. A huge low sun sits in the right third of the frame, half sunk behind a distant mesa. Layered sandstone buttes and flat-topped mesas recede into atmospheric haze along a horizon line at about 60% of the image height, each layer paler and bluer with distance. Dramatic streaked clouds in deep plum, magenta and burnt orange, catching warm rim light from the sunset; a few birds circling high in the sky. The lower third is a dark desert plain fading almost to silhouette, empty and uncluttered, with sparse dry brush. Painterly hand-painted backdrop feel, soft airbrushed gradients, matte finish, rich saturated dusk palette (deep purple #1a0b20, plum #4a1638, burnt sienna #b54a2c, amber #e08a3c, warm highlight #ffd9a0). No text, no lettering, no people, no animals, no buildings, no watermark.
 
 （生成结果右下角带水印，导入时把底部裁掉了 82px；正好那块区域本来也被地面层盖住。）
+
+### 手机上的舞台
+
+舞台是按 1600×900 的宽幅画的，四个人横排站开——这个比例天生和手机的竖屏八字不合。所以两套排法：
+
+| 方向 | 缩放方式 | 结果 |
+| ---- | -------- | ---- |
+| 横屏 | `cover`（取 `max`） | 铺满整屏，两侧多余部分裁掉，人最大 |
+| 竖屏 | `contain`（取 `min`） | 整支乐队按宽度缩进去，脚踩在播放条上方，上方留出天空 |
+
+竖屏时舞台只占下面一条，于是冒出一个新问题：SVG 里那层压暗天空的紫色渐变（`#skyTint`）原本是给整屏铺的，一旦只铺下半截，它的上边缘就会在画布上切出一道**硬缝**。解决办法是给 SVG 挂一层 `mask-image`，从天空顶端到地平线渐隐到透明，让底下的画布天空接管上半屏——缝就没了，人也还站在原来的木台上。
+
+竖屏实在不是这个舞台的主场，所以第一次拉开帷幕时会劝一句「横屏更好看」。这张卡片不会堵门：点「仍然竖屏」、点卡片外面、或者干等 6.5 秒，它自己就让路，之后不再出现。
+
+其它为手机做的调整：
+
+- `100dvh` + `overflow: hidden`，躲开 iOS 地址栏伸缩带来的抖动
+- 播放条 `bottom: max(10px, env(safe-area-inset-bottom))`，不压 Home 指示条
+- 小屏（`max-width: 560px` / `max-height: 480px`）时按钮缩到 34px、版本号从右下角挪到左上角——原来那个位置正好被播放条盖住
+- 渲染分辨率上限：手机上 `devicePixelRatio` 封在 1.5，桌面封在 2；再高就是拿电换像素
+- 帷幕、进度条都开了 `touch-action: none` / `manipulation`，拖动不会连带滚页面
 
 ## 怎么玩
 
@@ -122,6 +143,7 @@ python tools/build_single.py     # 需要 pillow / lameenc / miniaudio
 | v2.4.0 | 鼓手登场，鼓从太鼓角色那儿借来，第 3 拍自己飞过来砸她脑袋，每次换一张随机表情 |
 | v2.4.1 | 上场/退场/暂停全部加音量缓入缓出，新乐手插进合奏不再突兀 |
 | v2.5.0 | 开场加红丝绒帷幕（拖开才开演）、加「全部开演」一键按钮、背景换成 AI 生成的画布幕布 |
+| v2.6.0 | 手机适配：横屏铺满、竖屏装箱并给播放条让位，竖屏天空渐隐消掉硬缝，附一句「横屏更好看」的提醒 |
 
 ## 版本控制小课堂
 

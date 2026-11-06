@@ -95,7 +95,7 @@ def main():
         print("警告：还有外链 ->", set(left))
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    out = os.path.join(OUT_DIR, "GitStudy-AngelBand-v2.5.0.html")
+    out = os.path.join(OUT_DIR, "GitStudy-AngelBand-v2.6.0.html")
     with io.open(out, "w", encoding="utf-8") as f:
         f.write(html)
 
