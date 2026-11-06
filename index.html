@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>GitStudy-AngelBand · 西部舞台 v2.3.0</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.4.0</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #0b0710; }
@@ -96,12 +96,13 @@
   }
 
   /* ===== 怪兽（Spine 渲染层） ===== */
-  #angel, #phonor, #bass { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  #angel, #phonor, #bass, #drummer { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
   #angel .figure, #angel .bobber,
   #phonor .figure, #phonor .bobber,
-  #bass .figure, #bass .bobber { position: absolute; inset: 0; }
-  #angel canvas, #phonor canvas, #bass canvas { display: block; width: 100%; height: 100%; }
-  #angel .hit, #phonor .hit, #bass .hit {
+  #bass .figure, #bass .bobber,
+  #drummer .figure, #drummer .bobber { position: absolute; inset: 0; }
+  #angel canvas, #phonor canvas, #bass canvas, #drummer canvas { display: block; width: 100%; height: 100%; }
+  #angel .hit, #phonor .hit, #bass .hit, #drummer .hit {
     position: absolute; pointer-events: auto; cursor: pointer; z-index: 3;
   }
 
@@ -486,6 +487,12 @@
     <div class="hit"></div>
   </div>
 
+  <!-- 鼓手：白发小女孩 + 会撞人的太鼓（Pixi 渲染） -->
+  <div id="drummer" class="monster off" data-monster="drummer">
+    <div class="figure"><div class="bobber"></div></div>
+    <div class="hit"></div>
+  </div>
+
   <!-- 贝斯手：蓝发吹号者（Pixi 渲染） -->
   <div id="bass" class="monster off" data-monster="bass">
     <div class="figure"><div class="bobber"></div></div>
@@ -515,7 +522,7 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">GitStudy-AngelBand · v2.3.0 · 西部舞台</div>
+  <div class="tag">GitStudy-AngelBand · v2.4.0 · 西部舞台</div>
 
   <div class="hint" id="hint">点 击 乐 手 ， 让 他 们 一 个 个 上 场</div>
 
@@ -532,6 +539,7 @@
 <script src="spine/lib/angel-assets.js"></script>
 <script src="spine/lib/phonor-assets.js"></script>
 <script src="spine/lib/mostma-assets.js"></script>
+<script src="spine/lib/girl-assets.js"></script>
 <script>
 (function () {
   "use strict";
@@ -551,7 +559,8 @@
   var MONSTERS = [
     { id: "singer", src: "singer.mp3", bobBeats: 2, volume: 0.95 },
     { id: "guitar", src: "guitar.mp3", bobBeats: 2, volume: 0.9 },
-    { id: "bass",   src: "bass.mp3",   bobBeats: 2, volume: 0.95 }
+    { id: "bass",   src: "bass.mp3",   bobBeats: 2, volume: 0.95 },
+    { id: "drummer", src: "drums.mp3", bobBeats: 1, volume: 0.95 }
   ];
 
   var playBtn = document.getElementById("playBtn");
@@ -1035,6 +1044,155 @@
     };
   }
 
+  /* ===== 鼓手：鼓自己跳起来撞她，她躲不掉 =====
+     四拍一个循环：待机 → 蓄力后缩 → 猛冲 → 命中 → 弹回去。
+     鼓的落点每帧取她「当前」的头的位置，所以她往哪边躲，鼓就跟到哪。 */
+  function ease(x) {
+    x = x < 0 ? 0 : (x > 1 ? 1 : x);
+    return x * x * (3 - 2 * x);
+  }
+
+  function drumSkit(t) {
+    var cycle = BEAT * 4;
+    var p = (t % cycle) / cycle;      // 0..1，四拍一循环
+    var wind = 0, lunge = 0, squash = 0, shock = 0;
+
+    /* 节拍对齐：p=0.75 正好是第 3 拍，鼓就砸在这一下 */
+    if (p < 0.52) {
+      /* 待机 */
+    } else if (p < 0.68) {
+      wind = ease((p - 0.52) / 0.16);
+      squash = wind * 0.7;
+    } else if (p < 0.75) {
+      wind = 1;
+      lunge = ease((p - 0.68) / 0.07);
+      squash = 0.7;
+    } else if (p < 0.86) {
+      wind = 1; lunge = 1; squash = 1; shock = 1;
+    } else {
+      var k = (p - 0.86) / 0.14;
+      wind = 1 - ease(k);
+      lunge = 1 - ease(k);
+      squash = 0.7 * (1 - k);
+      shock = Math.max(0, 1 - k * 5);
+    }
+    return { p: p, wind: wind, lunge: lunge, squash: squash, shock: shock };
+  }
+
+  /* 她那一边的反应：想躲、被撞、尾巴乱甩 */
+  function drummerMotion(character, host) {
+    var sk = character.skeleton;
+    var head = sk.findBone("F_Head");
+    var body = sk.findBone("F_Body");
+    var tail = sk.findBone("F_Tail");
+    var face = sk.findSlot("F_Face1");
+    var emo = sk.findSlot("F_EMO1");
+
+    /* 先把可用的表情列出来（F_Face1..8 / F_EMO1..8 里实际存在的那几个） */
+    var faces = [], emos = [];
+    for (var i = 1; i <= 8; i++) {
+      if (face && sk.getAttachment(face.data.index, "F_Face" + i)) faces.push("F_Face" + i);
+      if (emo && sk.getAttachment(emo.data.index, "F_EMO" + i)) emos.push("F_EMO" + i);
+    }
+
+    var lastShock = 0;
+    /* 当前被选中的表情。每帧都写回去一遍：
+       万一动画里还留着表情时间线（或者别的动画被播放），也不会被冲掉。 */
+    var chosenFace = null, chosenEmo = null;
+
+    var originalApply = character.state.apply.bind(character.state);
+    character.state.apply = function (skeleton) {
+      originalApply(skeleton);
+
+      /* 第一次先认动画给的那张脸作为基准，之后一直用我们挑的 */
+      if (!chosenFace && face) chosenFace = face.getAttachment();
+      if (!chosenEmo && emo) chosenEmo = emo.getAttachment();
+      if (chosenFace && face.getAttachment() !== chosenFace) face.setAttachment(chosenFace);
+      if (chosenEmo && emo.getAttachment() !== chosenEmo) emo.setAttachment(chosenEmo);
+
+      if (!host.classList.contains("on")) { lastShock = 0; return; }
+
+      var pos = audioPos();
+      if (pos === null || pos <= 0) pos = performance.now() / 1000;
+      var t = Math.max(0, pos - FIRST_BEAT);
+      var k = drumSkit(t);
+
+      /* 蓄力时她察觉到了，往反方向歪头想躲 */
+      if (head) head.rotation += 6 * k.wind * (1 - k.lunge);
+      /* 撞上的瞬间整个人往后一仰 */
+      if (head) head.rotation -= 14 * k.shock;
+      if (body) body.rotation += 3.2 * k.shock;
+      if (tail) tail.rotation += 26 * k.shock;
+
+      /* 每次撞到换一张随机表情（和上一张不重复，免得连续两次撞出同款） */
+      if (k.shock > 0.9 && lastShock <= 0.9) {
+        if (faces.length) {
+          chosenFace = sk.getAttachment(face.data.index, pickOther(faces, chosenFace));
+          face.setAttachment(chosenFace);
+        }
+        if (emos.length) {
+          chosenEmo = sk.getAttachment(emo.data.index, pickOther(emos, chosenEmo));
+          emo.setAttachment(chosenEmo);
+        }
+      }
+      lastShock = k.shock;
+    };
+  }
+
+  /* 从名字表里随机挑一个，尽量避开当前这张 */
+  function pickOther(list, current) {
+    var pool = list.filter(function (n) { return !current || current.name !== n; });
+    if (!pool.length) pool = list;
+    return pool[(Math.random() * pool.length) | 0];
+  }
+
+  /* 鼓本体：独立精灵，跟着头的当前位置飞 */
+  function addDrum(character, cfg, assets, host) {
+    var img = new Image();
+    img.onload = function () {
+      var bt = PIXI.BaseTexture.from(img);
+      var sp = new PIXI.Sprite(new PIXI.Texture(bt));
+      sp.anchor.set(0.5, 0.5);
+      character.addChild(sp);
+
+      var baseScale = cfg.scale || 0.72;
+      var origUpdate = character.update.bind(character);
+
+      character.update = function (dt) {
+        origUpdate(dt);
+        var sk = character.skeleton;
+        var body = sk.findBone("F_Body");
+        var head = sk.findBone("F_Head");
+        if (!body || !head) return;
+
+        var on = host.classList.contains("on");
+        var k = { wind: 0, lunge: 0, squash: 0 };
+        var bob = 0;
+
+        if (on) {
+          var pos = audioPos();
+          if (pos === null || pos <= 0) pos = performance.now() / 1000;
+          k = drumSkit(Math.max(0, pos - FIRST_BEAT));
+          bob = Math.sin(performance.now() / 700) * 2.2;   // 待机时轻轻飘
+        }
+
+        /* 待机位：在她左边；蓄力时再往后缩一点 */
+        var bx = body.worldX + cfg.base[0] - 34 * k.wind;
+        var by = body.worldY + cfg.base[1] + bob + 10 * k.wind + 14 * k.squash;
+        /* 落点：她「此刻」的头，所以躲不掉 */
+        var tx = head.worldX + cfg.hitOffset[0];
+        var ty = head.worldY + cfg.hitOffset[1];
+
+        sp.position.set(bx + (tx - bx) * k.lunge, by + (ty - by) * k.lunge);
+        sp.rotation = (cfg.tilt || 0) - 0.18 * k.lunge;
+        /* 压缩感：横着挤、竖向拉 */
+        sp.scale.set(baseScale * (1 + 0.14 * k.squash - 0.07 * k.lunge),
+                     baseScale * (1 - 0.20 * k.squash + 0.10 * k.lunge));
+      };
+    };
+    img.src = "data:image/png;base64," + assets.drum;
+  }
+
   function createCharacter(cfg) {
     var host = document.getElementById(cfg.el);
     if (!host) return;
@@ -1099,6 +1257,21 @@
           try {
             var bin = new PIXI.spine.SkeletonBinary(new PIXI.spine.AtlasAttachmentLoader(atlasObj));
             var data = bin.readSkeletonData(b64ToBytes(assets.skel));
+
+            /* 鼓手要按拍子随机换表情，动画里的表情时间线会把它覆盖掉，先摘掉。
+               注意：pixi-spine 是压缩过的，类名被改了（Gt），
+               不能用 constructor.name 判断，必须用导出的类引用。 */
+            if (cfg.stripExpr) {
+              var AT = PIXI.spine.AttachmentTimeline;
+              data.animations.forEach(function (a) {
+                a.timelines = a.timelines.filter(function (t) {
+                  if (!(t instanceof AT)) return true;
+                  var sl = data.slots[t.slotIndex];
+                  return !(sl && /^(F_Face1|F_EMO1)$/.test(sl.name));
+                });
+              });
+            }
+
             character = new PIXI.spine.Spine(data);
             root.addChild(character);
 
@@ -1111,9 +1284,10 @@
                直接量包围盒会把它们算进去，导致缩放偏小、人物飘在半空。
                posedBounds 的角色先把动画应用上、清掉道具槽，再量。 */
             if (cfg.posedBounds) {
+              var hide = new RegExp(cfg.hideSlots || "Instr");
               for (var si = 0; si < character.skeleton.slots.length; si++) {
                 var sl = character.skeleton.slots[si];
-                if (/Instr/.test(sl.data.name)) sl.setAttachment(null);
+                if (hide.test(sl.data.name)) sl.setAttachment(null);
               }
               character.state.setAnimation(0, pick, true);
               character.state.update(0);
@@ -1130,6 +1304,7 @@
             character.state.setAnimation(0, pick, true);
 
             if (cfg.prop) addProp(character, cfg.prop, assets, baseTex, host);
+            if (cfg.drum) addDrum(character, cfg.drum, assets, host);
             if (cfg.motion) cfg.motion(character, host);
             syncOnOff();
           } catch (e) {
@@ -1144,16 +1319,30 @@
     img.src = "data:image/png;base64," + assets.png;
   }
 
-  /* 站位：舞台中线 800，主唱 500 / 吉他 830 / 贝斯 1160，三人等距一字排开 */
+  /* 站位：四人一字排开，鼓手 428 / 主唱 668 / 吉他 954 / 贝斯 1237 */
+  createCharacter({
+    el: "drummer", assets: "GIRL_ASSETS", anim: "Relax",
+    x: 428, charH: 300, visRatio: 0.95, visWFactor: 0.60,
+    posedBounds: true, hideSlots: "^C_",
+    stripExpr: true,
+    motion: drummerMotion,
+    drum: {
+      base: [-170, -78],       /* 待机位：她左手边，齐胸口 */
+      hitOffset: [-20, 6],     /* 撞上去时咬在她头上 */
+      scale: 0.78,
+      tilt: -0.1
+    }
+  });
+
   createCharacter({
     el: "angel", assets: "ANGEL_ASSETS", anim: "Relax",
-    x: 830, charH: 720, visRatio: 0.42, visWFactor: 0.30,
+    x: 954, charH: 720, visRatio: 0.42, visWFactor: 0.30,
     motion: guitarMotion
   });
 
   createCharacter({
     el: "bass", assets: "MOSTMA_ASSETS", anim: "Relax",
-    x: 1160, charH: 300, visRatio: 0.98, visWFactor: 0.70,
+    x: 1237, charH: 300, visRatio: 0.98, visWFactor: 0.70,
     posedBounds: true,
     motion: bassMotion,
     prop: {
@@ -1167,7 +1356,7 @@
 
   createCharacter({
     el: "phonor", assets: "PHONOR_ASSETS", anim: "Special",
-    x: 500, charH: 336, visRatio: 0.895, visWFactor: 0.89,
+    x: 668, charH: 336, visRatio: 0.895, visWFactor: 0.89,
     shiftXRatio: 0.9965,   /* 实测：bounds 中心比车身偏右约 1 个身高 */
     motion: singerMotion
   });
