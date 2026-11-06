@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Spine 角色预览 · 1041 angel2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #140c18; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #e8d5bb;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 14px 22px 10px;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: .5px; }
+  header .meta { font-size: 12px; color: #9b8676; font-family: Consolas, monospace; }
+  #stage { flex: 1; position: relative; min-height: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  #status {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-size: 14px; color: #c9a981; text-align: center; line-height: 1.8;
+    pointer-events: none;
+  }
+  #status.err { color: #ff9d8a; }
+  footer {
+    padding: 12px 18px 18px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border-top: 1px solid rgba(255,190,120,.12);
+    background: rgba(10,6,12,.6);
+  }
+  footer .label { font-size: 12px; color: #9b8676; margin-right: 4px; }
+  button {
+    background: rgba(255,170,90,.09);
+    border: 1px solid rgba(255,190,120,.28);
+    color: #f0d7b3;
+    border-radius: 999px;
+    padding: 7px 15px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    font-family: inherit;
+  }
+  button:hover { background: rgba(255,170,90,.2); }
+  button.on { background: rgba(255,170,90,.3); border-color: #ffc27a; color: #fff2dd; }
+  button.toggle { margin-left: auto; }
+  .tip { width: 100%; font-size: 11.5px; color: #7d6b5d; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Spine 角色预览</h1>
+  <span class="meta" id="meta">Spine 3.8.99 · 二进制 .skel · 载入中…</span>
+</header>
+
+<div id="stage">
+  <div id="status">正在加载角色资源…</div>
+</div>
+
+<footer>
+  <span class="label">动画</span>
+  <span id="animButtons"></span>
+  <button class="toggle" id="boneBtn" type="button">显示骨骼</button>
+  <div class="tip" id="tip">动画来自 .skel 内的数据，未做任何改动；点击按钮切换，右键画布可拖动缩放。</div>
+</footer>
+
+<script src="spine/lib/pixi.min.js"></script>
+<script src="spine/lib/pixi-spine-3.8.js"></script>
+<script src="spine/lib/angel-assets.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var stage = document.getElementById("stage");
+  var statusEl = document.getElementById("status");
+  var metaEl = document.getElementById("meta");
+  var btnBox = document.getElementById("animButtons");
+  var boneBtn = document.getElementById("boneBtn");
+
+  function fail(msg) {
+    statusEl.textContent = msg;
+    statusEl.classList.add("err");
+    statusEl.style.display = "block";
+  }
+
+  if (!window.PIXI || !PIXI.spine || !PIXI.spine.Spine) {
+    fail("渲染库没加载成功：检查 spine/lib/ 下两个 js 文件");
+    return;
+  }
+
+  var app = new PIXI.Application({
+    resizeTo: stage,
+    backgroundColor: 0x140c18,
+    antialias: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    autoDensity: true
+  });
+  stage.appendChild(app.view);
+
+  // 柔和的舞台地面光
+  var glow = new PIXI.Graphics();
+  app.stage.addChild(glow);
+  function drawGlow() {
+    glow.clear();
+    glow.beginFill(0xffb45f, 0.06);
+    glow.drawEllipse(app.screen.width / 2, app.screen.height * 0.9, app.screen.width * 0.32, 26);
+    glow.endFill();
+  }
+  drawGlow();
+  app.renderer.on("resize", drawGlow);
+
+  var character = null;
+  var debugOn = false;
+  var debugGfx = null;
+
+  function fit() {
+    if (!character) return;
+    character.state.update(0);
+    character.skeleton.updateWorldTransform();
+    var b = character.getLocalBounds();
+    if (!b || !b.width || !b.height) return;
+    character.pivot.set(b.x + b.width / 2, b.y + b.height / 2);
+    character.position.set(app.screen.width / 2, app.screen.height / 2);
+    var s = Math.min(app.screen.width * 0.60 / b.width, app.screen.height * 0.82 / b.height);
+    character.scale.set(s);
+  }
+  app.renderer.on("resize", fit);
+
+  function play(name) {
+    if (!character) return;
+    character.state.setAnimation(0, name, true);
+    Array.prototype.forEach.call(btnBox.children, function (b) {
+      b.classList.toggle("on", b.getAttribute("data-anim") === name);
+    });
+  }
+
+  function drawBones() {
+    if (!debugGfx) return;
+    debugGfx.clear();
+    if (!debugOn || !character) return;
+    var sk = character.skeleton;
+    sk.updateWorldTransform();
+    var bs = sk.bones;
+    debugGfx.lineStyle(1, 0xffc27a, 0.5);
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      var len = b.data.length || 12;
+      var x2 = b.worldX + b.a * len;
+      var y2 = b.worldY + b.b * len;
+      debugGfx.moveTo(b.worldX, b.worldY);
+      debugGfx.lineTo(x2, y2);
+    }
+    debugGfx.lineStyle(0);
+    debugGfx.beginFill(0x7fd0ff, 0.85);
+    for (var j = 0; j < bs.length; j++) debugGfx.drawCircle(bs[j].worldX, bs[j].worldY, 1.6);
+    debugGfx.endFill();
+  }
+  app.ticker.add(drawBones);
+
+  boneBtn.addEventListener("click", function () {
+    debugOn = !debugOn;
+    boneBtn.classList.toggle("on", debugOn);
+    boneBtn.textContent = debugOn ? "隐藏骨骼" : "显示骨骼";
+  });
+
+  // 滚轮缩放 / 拖动平移
+  app.view.addEventListener("wheel", function (e) {
+    if (!character) return;
+    e.preventDefault();
+    var k = e.deltaY < 0 ? 1.1 : 0.9;
+    character.scale.x *= k;
+    character.scale.y *= k;
+  }, { passive: false });
+  var drag = null;
+  app.view.addEventListener("pointerdown", function (e) {
+    drag = { x: e.clientX, y: e.clientY, px: character ? character.x : 0, py: character ? character.y : 0 };
+  });
+  window.addEventListener("pointermove", function (e) {
+    if (!drag || !character) return;
+    character.x = drag.px + (e.clientX - drag.x);
+    character.y = drag.py + (e.clientY - drag.y);
+  });
+  window.addEventListener("pointerup", function () { drag = null; });
+
+  function b64ToBytes(b64) {
+    var raw = atob(b64), arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+
+  function build(assets) {
+    var img = new Image();
+    img.onload = function () {
+      var baseTex = PIXI.BaseTexture.from(img);
+
+      // 手动构造图集：资源已在内存里，不依赖服务器后缀与网络
+      var atlas = new PIXI.spine.TextureAtlas(
+        assets.atlas,
+        function (pageName, done) { done(baseTex); },
+        function (atlasObj) { onAtlasReady(atlasObj); }
+      );
+      if (!atlas.pages.length) fail("图集里没有贴图页");
+    };
+    img.onerror = function () { fail("贴图解码失败"); };
+    img.src = "data:image/png;base64," + assets.png;
+  }
+
+  function onAtlasReady(atlas) {
+    try {
+      var bin = new PIXI.spine.SkeletonBinary(new PIXI.spine.AtlasAttachmentLoader(atlas));
+      var data = bin.readSkeletonData(b64ToBytes(ANGEL_ASSETS.skel));
+      if (!data || !data.animations || !data.animations.length) {
+        fail("解析成功但没有动画数据");
+        return;
+      }
+      statusEl.style.display = "none";
+
+      character = new PIXI.spine.Spine(data);
+      app.stage.addChild(character);
+
+      debugGfx = new PIXI.Graphics();
+      character.addChild(debugGfx);
+
+      var anims = data.animations;
+      anims.forEach(function (a) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = a.name + " (" + a.duration.toFixed(1) + "s)";
+        b.setAttribute("data-anim", a.name);
+        b.addEventListener("click", function () { play(a.name); });
+        btnBox.appendChild(b);
+      });
+
+      var preferred = anims.filter(function (a) { return a.duration > 0.5; })[0];
+      play(preferred ? preferred.name : anims[0].name);
+      fit();
+
+      metaEl.textContent = "Spine " + (data.version || "3.8.99") + " · "
+        + data.bones.length + " 骨骼 / " + data.slots.length + " 插槽 / "
+        + anims.length + " 个动画";
+    } catch (e) {
+      fail("骨骼解析失败：" + (e && e.message ? e.message : e));
+      console.error(e);
+    }
+  }
+
+  if (!window.ANGEL_ASSETS) {
+    fail("资源数据没加载：检查 spine/lib/angel-assets.js");
+    return;
+  }
+  build(ANGEL_ASSETS);
+})();
+</script>
+</body>
+</html>

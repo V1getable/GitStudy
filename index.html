@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>怪兽交响团 · 西部舞台 v2.0.0</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.1.0</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #0b0710; }
@@ -95,44 +95,58 @@
     to   { transform: scaleY(.5); }
   }
 
-  /* ===== 怪兽 ===== */
-  .monster { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .monster .figure { transition: filter .35s ease, opacity .35s ease; }
-  .monster.off .figure { filter: grayscale(1) brightness(.55); opacity: .55; }
+  /* ===== 怪兽（Spine 渲染层） ===== */
+  #angel { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  #angel .figure, #angel .bobber { position: absolute; inset: 0; }
+  #angel canvas { display: block; width: 100%; height: 100%; }
+  #angel .hit {
+    position: absolute; left: 50%; top: 12%;
+    width: 40%; height: 72%;
+    transform: translateX(-50%);
+    pointer-events: auto; cursor: pointer; z-index: 3;
+  }
+
+  .monster .figure { transition: filter .35s ease, opacity .35s ease; transform-origin: 50% 88%; }
+  .monster.off .figure { filter: grayscale(1) brightness(.78); opacity: .72; }
   .monster.on .figure { filter: drop-shadow(0 0 22px rgba(255, 176, 92, .55)); }
 
-  .monster .head {
-    transform-box: fill-box;
-    transform-origin: 50% 88%;
-    transition: transform .1s cubic-bezier(.2, .9, .3, 1);
-  }
-  .monster.bob .head { transform: translateY(9px) scale(1.03, .95) rotate(1.5deg); }
+  /* 律动交给 Spine 动画本身；不再叠加 CSS 位移/旋转，
+     否则整层 canvas 一起动，看起来就是人物上下蹦 */
+  .monster .bobber { transition: none; }
 
-  .monster .strum {
-    transform-box: fill-box;
-    transform-origin: center;
-    transition: transform .08s ease-out;
+  /* 轨道视觉只有 4px，但可点击区域做成 22px —— 否则滑块根本抓不住 */
+  #seek {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    min-width: 60px;
+    height: 22px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    touch-action: none;
+    background: linear-gradient(rgba(255, 200, 140, .2), rgba(255, 200, 140, .2)) center / 100% 4px no-repeat;
   }
-  .monster.bob .strum { transform: translateY(7px) rotate(-14deg); }
-
-  /* 身体随节拍摇摆（--swayDur/--swayDelay 由 JS 按节拍网格实时对齐） */
-  .monster.on .figure {
-    transform-box: fill-box;
-    transform-origin: 50% 92%;
+  #seek::-webkit-slider-runnable-track { height: 4px; background: transparent; border-radius: 2px; }
+  #seek::-moz-range-track { height: 4px; background: transparent; border-radius: 2px; }
+  #seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: #ffc27a;
+    border: 2px solid rgba(60, 30, 12, .8);
+    box-shadow: 0 0 10px rgba(255, 170, 90, .6);
   }
-  .monster.on.jam .figure {
-    animation: sway var(--swayDur, 1.63s) ease-in-out infinite;
-    animation-delay: var(--swayDelay, 0s);
+  #seek::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #ffc27a;
+    border: 2px solid rgba(60, 30, 12, .8);
+    box-shadow: 0 0 10px rgba(255, 170, 90, .6);
   }
-  @keyframes sway {
-    0%, 100% { transform: rotate(-2.4deg); }
-    50%      { transform: rotate(2.4deg); }
-  }
-
-  /* 没有怪兽演奏时，进度条不可用 */
-  #seek:disabled { opacity: .3; cursor: default; }
-
-  /* ===== 播放条 ===== */
   .player {
     position: absolute;
     left: 50%;
@@ -148,6 +162,9 @@
     border: 1px solid rgba(255, 190, 120, .18);
     backdrop-filter: blur(6px);
     box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+    z-index: 5;
+    pointer-events: auto;
+    user-select: none;
   }
   .player button {
     width: 38px; height: 38px;
@@ -456,152 +473,13 @@
     <!-- 舞台中央暖光 -->
     <ellipse cx="800" cy="736" rx="380" ry="70" fill="#ffb45f" opacity=".07"/>
 
-    <!-- 吉他手：单眼圆球小怪兽（2D 平涂） -->
-    <g id="monster" class="monster off" data-monster="guitar" transform="translate(800,722) scale(1.02)">
-      <ellipse cx="0" cy="4" rx="66" ry="11" fill="#000" opacity=".3"/>
-
-      <g class="figure">
-        <!-- 细腿 -->
-        <path d="M-25,-52 C-29,-34 -29,-18 -27,-9" fill="none" stroke="#2B3A22" stroke-width="14" stroke-linecap="round"/>
-        <path d="M-25,-52 C-29,-34 -29,-18 -27,-9" fill="none" stroke="#7FB967" stroke-width="9" stroke-linecap="round"/>
-        <path d="M25,-52 C29,-34 29,-18 27,-9" fill="none" stroke="#2B3A22" stroke-width="14" stroke-linecap="round"/>
-        <path d="M25,-52 C29,-34 29,-18 27,-9" fill="none" stroke="#7FB967" stroke-width="9" stroke-linecap="round"/>
-
-        <!-- 三趾小脚 -->
-        <path d="M-46,-4 C-46,-12 -38,-16 -27,-12 C-16,-8 -12,-4 -14,0 C-24,4 -40,4 -46,-4 Z"
-              fill="#7FB967" stroke="#2B3A22" stroke-width="2.2"/>
-        <path d="M46,-4 C46,-12 38,-16 27,-12 C16,-8 12,-4 14,0 C24,4 40,4 46,-4 Z"
-              fill="#7FB967" stroke="#2B3A22" stroke-width="2.2"/>
-        <g fill="#F3E7C8" stroke="#2B3A22" stroke-width="1.2">
-          <path d="M-44,-2 L-50,-7 L-40,-6 Z"/>
-          <path d="M-34,1 L-38,-7 L-28,-4 Z"/>
-          <path d="M44,-2 L50,-7 L40,-6 Z"/>
-          <path d="M34,1 L38,-7 L28,-4 Z"/>
-        </g>
-
-        <!-- 左臂：细长 + 三爪 -->
-        <path d="M-70,-116 C-92,-104 -98,-82 -94,-62" fill="none" stroke="#2B3A22" stroke-width="13" stroke-linecap="round"/>
-        <path d="M-70,-116 C-92,-104 -98,-82 -94,-62" fill="none" stroke="#7FB967" stroke-width="8" stroke-linecap="round"/>
-        <g fill="none" stroke="#2B3A22" stroke-width="7" stroke-linecap="round">
-          <path d="M-94,-62 L-102,-50"/>
-          <path d="M-94,-62 L-94,-47"/>
-          <path d="M-94,-62 L-85,-51"/>
-        </g>
-        <g fill="none" stroke="#7FB967" stroke-width="4" stroke-linecap="round">
-          <path d="M-94,-62 L-102,-50"/>
-          <path d="M-94,-62 L-94,-47"/>
-          <path d="M-94,-62 L-85,-51"/>
-        </g>
-
-        <!-- 右臂（扫弦） -->
-        <g class="strum">
-          <path d="M70,-116 C88,-100 82,-76 66,-58" fill="none" stroke="#2B3A22" stroke-width="13" stroke-linecap="round"/>
-          <path d="M70,-116 C88,-100 82,-76 66,-58" fill="none" stroke="#7FB967" stroke-width="8" stroke-linecap="round"/>
-          <g fill="none" stroke="#2B3A22" stroke-width="7" stroke-linecap="round">
-            <path d="M66,-58 L74,-47"/>
-            <path d="M66,-58 L66,-43"/>
-            <path d="M66,-58 L57,-47"/>
-          </g>
-          <g fill="none" stroke="#7FB967" stroke-width="4" stroke-linecap="round">
-            <path d="M66,-58 L74,-47"/>
-            <path d="M66,-58 L66,-43"/>
-            <path d="M66,-58 L57,-47"/>
-          </g>
-        </g>
-
-        <!-- 木吉他（斜抱，右手扶琴颈） -->
-        <g transform="translate(52,-30) rotate(18)">
-          <path d="M0,-112 L0,-32" stroke="#2A1810" stroke-width="13" stroke-linecap="round"/>
-          <path d="M0,-112 L0,-32" stroke="#7A4A28" stroke-width="9" stroke-linecap="round"/>
-          <g stroke="#C9A15C" stroke-width="1.4" opacity=".8">
-            <path d="M-6,-96 L6,-96"/>
-            <path d="M-6,-84 L6,-84"/>
-            <path d="M-6,-72 L6,-72"/>
-            <path d="M-6,-60 L6,-60"/>
-            <path d="M-6,-48 L6,-48"/>
-          </g>
-          <rect x="-9" y="-132" width="18" height="23" rx="4" fill="#6B4426" stroke="#2A1810" stroke-width="2"/>
-          <circle cx="-6" cy="-126" r="2" fill="#C9A15C"/>
-          <circle cx="6" cy="-126" r="2" fill="#C9A15C"/>
-          <circle cx="-6" cy="-116" r="2" fill="#C9A15C"/>
-          <circle cx="6" cy="-116" r="2" fill="#C9A15C"/>
-          <path d="M0,-38 C-19,-38 -29,-24 -29,-10 C-29,8 -16,22 0,22 C16,22 29,8 29,-10 C29,-24 19,-38 0,-38 Z"
-                fill="#C98A4E" stroke="#2A1810" stroke-width="2.6"/>
-          <path d="M0,-34 C-14,-34 -23,-23 -23,-10 C-23,5 -13,17 0,17 C13,17 23,5 23,-10 C23,-23 14,-34 0,-34 Z"
-                fill="#B0743A" opacity=".6"/>
-          <circle cx="0" cy="-12" r="10" fill="#2E1A10"/>
-          <circle cx="0" cy="-12" r="10" fill="none" stroke="#E8C58A" stroke-width="1.8"/>
-          <circle cx="0" cy="-12" r="13" fill="none" stroke="#8A5426" stroke-width="1.2" opacity=".8"/>
-          <rect x="-12" y="8" width="24" height="5" rx="2" fill="#6B4426" stroke="#2A1810" stroke-width="1.4"/>
-          <g stroke="#F2E4C8" stroke-width=".9" opacity=".75">
-            <path d="M-3,-110 L-4,9"/>
-            <path d="M0,-110 L0,9"/>
-            <path d="M3,-110 L4,9"/>
-          </g>
-        </g>
-
-        <!-- 左轮小挂件 -->
-        <g transform="translate(-58,-44) rotate(10)">
-          <path d="M-6,0 L8,0 L10,18 L-8,18 Z" fill="#4A2C17" stroke="#2A1810" stroke-width="1.8"/>
-          <circle cx="1" cy="-4" r="2.8" fill="#9AA0A6" stroke="#2A1810" stroke-width="1.1"/>
-        </g>
-
-        <!-- 圆球本体（点头时整体下沉压扁） -->
-        <g class="head">
-          <path d="M0,-198 C46,-198 78,-164 78,-118 C78,-70 46,-38 0,-38 C-46,-38 -78,-70 -78,-118 C-78,-164 -46,-198 0,-198 Z"
-                fill="url(#mBody)" stroke="#2B3A22" stroke-width="2.8"/>
-          <!-- 底部暗面（2D 平涂一块） -->
-          <path d="M-76,-96 C-70,-58 -38,-38 0,-38 C38,-38 70,-58 76,-96 C58,-66 34,-54 0,-54 C-34,-54 -58,-66 -76,-96 Z"
-                fill="#4C8546" opacity=".55"/>
-          <!-- 顶部亮面 -->
-          <path d="M-58,-158 C-44,-186 -20,-196 0,-196 C-24,-190 -42,-176 -50,-150 Z"
-                fill="#C7E9A8" opacity=".4"/>
-
-          <!-- 两只小角 -->
-          <path d="M-44,-188 C-52,-210 -46,-224 -36,-222 C-32,-212 -32,-198 -28,-190 Z"
-                fill="#F3E7C8" stroke="#2B3A22" stroke-width="2.2" stroke-linejoin="round"/>
-          <path d="M44,-188 C52,-210 46,-224 36,-222 C32,-212 32,-198 28,-190 Z"
-                fill="#F3E7C8" stroke="#2B3A22" stroke-width="2.2" stroke-linejoin="round"/>
-
-          <!-- 单只大眼 -->
-          <ellipse cx="0" cy="-134" rx="37" ry="34" fill="#FFFDF7" stroke="#2B3A22" stroke-width="2.6"/>
-          <circle cx="5" cy="-133" r="17" fill="#4E9E96" stroke="#2B3A22" stroke-width="1.6"/>
-          <circle cx="5" cy="-133" r="11" fill="#2E6F6B" opacity=".55"/>
-          <circle cx="5" cy="-133" r="7.5" fill="#16232A"/>
-          <circle cx="-2" cy="-142" r="5" fill="#fff"/>
-          <circle cx="11" cy="-126" r="2" fill="#fff" opacity=".8"/>
-          <!-- 大嘴 + 尖牙 -->
-          <path d="M-40,-88 Q0,-62 40,-88 Q34,-52 0,-50 Q-34,-52 -40,-88 Z"
-                fill="#241A14" stroke="#2B3A22" stroke-width="2.2" stroke-linejoin="round"/>
-          <g fill="#FFFDF7" stroke="#2B3A22" stroke-width="1">
-            <path d="M-32,-83 L-26,-72 L-20,-80 Z"/>
-            <path d="M-19,-77 L-13,-66 L-7,-75 Z"/>
-            <path d="M-6,-73 L0,-62 L6,-73 Z"/>
-            <path d="M7,-75 L13,-66 L19,-77 Z"/>
-            <path d="M20,-80 L26,-72 L32,-83 Z"/>
-            <path d="M-25,-52 L-19,-60 L-13,-52 Z"/>
-            <path d="M-8,-50 L-2,-58 L4,-50 Z"/>
-            <path d="M11,-52 L17,-60 L23,-52 Z"/>
-          </g>
-
-          <!-- 牛仔帽 -->
-          <g transform="translate(0,-198) rotate(-4)">
-            <path d="M-66,-8 Q-40,12 0,12 Q40,12 66,-8 Q40,-20 0,-20 Q-40,-20 -66,-8 Z"
-                  fill="#6B4630" stroke="#2A1810" stroke-width="2.4"/>
-            <path d="M-27,-14 C-32,-46 -18,-56 0,-56 C18,-56 32,-46 27,-14 Z"
-                  fill="#7A5138" stroke="#2A1810" stroke-width="2.4"/>
-            <path d="M-13,-53 Q0,-46 13,-53" stroke="#4A2E1B" stroke-width="3" fill="none" stroke-linecap="round"/>
-            <path d="M-27,-16 Q0,-6 27,-16 L27,-9 Q0,1 -27,-9 Z"
-                  fill="#A83E2C" stroke="#2A1810" stroke-width="1.6"/>
-            <rect x="-5" y="-13" width="10" height="7" rx="1.5" fill="#C9A15C" stroke="#2A1810" stroke-width="1.2"/>
-            <path d="M-20,-42 C-24,-32 -24,-22 -23,-16" stroke="#94664A" stroke-width="3" fill="none" opacity=".6" stroke-linecap="round"/>
-          </g>
-        </g>
-      </g>
-
-      <rect x="-104" y="-248" width="208" height="256" fill="rgba(0,0,0,0)"/>
-    </g>
   </svg>
+
+  <!-- 吉他手：Spine 角色（Pixi 渲染） -->
+  <div id="angel" class="monster off" data-monster="guitar">
+    <div class="figure"><div class="bobber"></div></div>
+    <div class="hit"></div>
+  </div>
 
   <!-- 风滚草 -->
   <svg class="tumbleweed" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -626,18 +504,21 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">v2.1.0 · 西部舞台 · 吉他手 Live</div>
+  <div class="tag">GitStudy-AngelBand · v2.1.0 · 西部舞台</div>
 
   <div class="hint" id="hint">点 击 吉 他 手 ， 让 它 开 演</div>
 
   <div class="player">
     <button id="playBtn" type="button" aria-label="播放">▶</button>
     <span class="time" id="curTime">0:00</span>
-    <input id="seek" type="range" min="0" max="100" step="0.05" value="0" disabled aria-label="播放进度">
+    <input id="seek" type="range" min="0" max="100" step="0.05" value="0" aria-label="播放进度">
     <span class="time" id="durTime">–:––</span>
   </div>
 </div>
 
+<script src="spine/lib/pixi.min.js"></script>
+<script src="spine/lib/pixi-spine-3.8.js"></script>
+<script src="spine/lib/angel-assets.js"></script>
 <script>
 (function () {
   "use strict";
@@ -669,6 +550,9 @@
   var dragging  = false;    // 拖动进度条期间不回写滑块
   var duration  = 0;
   var syncTick  = 0;
+  var pendingPos = 0;      // 台上没人时拖动进度条，先记下位置
+  var seekGuardUntil = 0;  // 跳转完成后再留一点回写缓冲
+  var seekPending = false;  // 跳转指令还没落到音频上
 
   function fmt(s) {
     s = Math.max(0, s);
@@ -681,14 +565,47 @@
     return MONSTERS.filter(function (m) { return m.on; });
   }
 
+  /* 供 Spine 拨弦循环读取：当前正在演奏的音轨时间 */
+  window.__angelAudioTime = function () {
+    var a = active();
+    return a.length ? a[0].audio.currentTime : null;
+  };
+
+  function waitMetadata(m) {
+    return new Promise(function (resolve) {
+      if (m.audio.readyState >= 1) return resolve();
+      m.audio.addEventListener("loadedmetadata", resolve, { once: true });
+      m.audio.addEventListener("error", resolve, { once: true });
+    });
+  }
+
   MONSTERS.forEach(function (m) {
     m.el = document.querySelector('[data-monster="' + m.id + '"]');
     m.on = false;
     m.lastBob = -1;
 
-    m.audio = new Audio(m.src);
-    m.audio.preload = "metadata";
+    m.audio = new Audio();
+    m.audio.preload = "auto";
     m.audio.volume = m.volume;
+
+    /* 预览服务器不支持 HTTP Range，直接给 URL 会导致 currentTime 跳不动。
+       把整段音频读进内存做成 Blob URL，浏览器就能任意定位。 */
+    m.ready = fetch(m.src)
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      })
+      .then(function (blob) {
+        m.audio.src = URL.createObjectURL(blob);
+        m.audio.load();
+        return waitMetadata(m);
+      })
+      .catch(function () {
+        /* file:// 直接双击打开时 fetch 会被拦，退回原始路径 */
+        m.audio.src = m.src;
+        m.audio.load();
+        return waitMetadata(m);
+      });
 
     m.audio.addEventListener("loadedmetadata", function () {
       var d = m.audio.duration;
@@ -725,10 +642,13 @@
       hint.classList.add("gone");
       /* 台上已有同伴在演时，新上场者从同一时刻加入，保持乐队同步 */
       var others = active().filter(function (x) { return x !== m; });
-      if (others.length) m.audio.currentTime = others[0].audio.currentTime;
+      var want = others.length ? others[0].audio.currentTime : pendingPos;
+      m.ready.then(function () {
+        try { m.audio.currentTime = want; } catch (e) {}
+        if (transport === "playing") syncSway(m, m.audio.currentTime);
+      });
       if (transport === "playing") {
         m.el.classList.add("jam");
-        syncSway(m, m.audio.currentTime);
         safePlay(m);
       }
     } else {
@@ -748,7 +668,9 @@
     transport = "playing";
     playBtn.textContent = "❚❚";
     a.forEach(function (m) {
-      syncSway(m, m.audio.currentTime);
+      m.ready.then(function () {
+        if (transport === "playing") syncSway(m, m.audio.currentTime);
+      });
       m.el.classList.add("jam");
       safePlay(m);
     });
@@ -773,38 +695,40 @@
   }
 
   function safePlay(m) {
-    var p = m.audio.play();
-    if (p && p.catch) p.catch(function () { pauseTransport(); });
+    m.ready.then(function () {
+      if (!m.on || transport !== "playing") return;
+      var p = m.audio.play();
+      if (p && p.catch) p.catch(function () { pauseTransport(); });
+    });
   }
 
   /* ---------- 播放条状态（静音/播放控制的初始与切换态） ---------- */
   function refreshControls() {
     var a = active();
+    seek.disabled = false;              // 进度条始终可拖，别再拦住用户
     if (!a.length) {
       transport = "idle";
-      seek.disabled = true;
       playBtn.textContent = "▶";
       hint.textContent = HINT_TEXT;
       hint.classList.remove("gone");
     } else {
-      seek.disabled = false;
       if (transport === "idle") transport = "paused";
       playBtn.textContent = (transport === "playing") ? "❚❚" : "▶";
     }
     durTime.textContent = duration ? fmt(duration) : "–:––";
   }
 
-  /* ---------- 摇摆 / 点头：以节拍网格为准 ---------- */
+  /* ---------- 节拍网格 ----------
+     律动完全交给 Spine 动画自身（Interact），不再叠加 CSS 位移/旋转。
+     保留网格供以后新增乐手做同步用。 */
   function syncSway(m, pos) {
-    var period = BEAT * m.bobBeats * 2;   // 身体一个来回 = 两次点头
+    var period = BEAT * m.bobBeats * 2;
     var ph = pos > FIRST_BEAT ? (pos - FIRST_BEAT) % period : 0;
-    m.el.style.setProperty("--swayDur", period.toFixed(4) + "s");
-    m.el.style.setProperty("--swayDelay", (-ph).toFixed(4) + "s");
+    m.beatPhase = ph;   // 只记录相位，不改动 DOM
   }
 
   function bob(m) {
-    m.el.classList.add("bob");
-    setTimeout(function () { m.el.classList.remove("bob"); }, 110);
+    m.lastBeatIdx = (m.lastBeatIdx || 0) + 1;   // 只记数，不改动 DOM
   }
 
   /* ---------- 进度条 ---------- */
@@ -816,21 +740,41 @@
   function commitSeek() {
     var v = parseFloat(seek.value) || 0;
     if (duration && v > duration) v = duration;
-    active().forEach(function (m) {
-      m.audio.currentTime = v;
-      m.lastBob = -1;                        // 让点头网格随进度重算
-      if (transport === "playing") syncSway(m, v);
-    });
+    pendingPos = v;
+
+    /* 先把滑块固定在目标位置；等音频真正跳过去之前，主循环不许回写 */
     updateUI(v);
+    var a = active();
+    if (!a.length) return;
+
+    seekPending = true;
+    Promise.all(a.map(function (m) {
+      return m.ready.then(function () {
+        try {
+          m.audio.currentTime = v;
+          m.lastBob = -1;
+          if (transport === "playing") syncSway(m, v);
+        } catch (e) {}
+      });
+    })).then(function () {
+      seekPending = false;
+      seekGuardUntil = performance.now() + 350;
+    });
   }
 
   seek.addEventListener("pointerdown", function () { dragging = true; });
-  window.addEventListener("pointerup", function () {
-    if (dragging) { dragging = false; commitSeek(); }
-  });
-  window.addEventListener("pointercancel", function () {
-    if (dragging) { dragging = false; commitSeek(); }
-  });
+
+  /* 松手、取消、失焦、change 都可能是拖动终点，用 finishDrag 保证只提交一次 */
+  function finishDrag() {
+    if (!dragging) return;
+    dragging = false;
+    commitSeek();
+  }
+  window.addEventListener("pointerup", finishDrag);
+  window.addEventListener("pointercancel", finishDrag);
+  window.addEventListener("blur", finishDrag);
+  seek.addEventListener("change", function () { if (dragging) finishDrag(); });
+
   seek.addEventListener("input", function () {
     curTime.textContent = fmt(parseFloat(seek.value) || 0);
     if (!dragging) commitSeek();   // 键盘方向键：立即生效
@@ -848,8 +792,23 @@
     if (transport !== "playing" || dragging) return;
     var a = active();
     if (!a.length) return;
+    if (performance.now() < seekGuardUntil) return;
+    if (seekPending || a[0].audio.seeking) return;   // 跳转未完成/浏览器正在定位
+
+    /* 有些浏览器不触发 loadedmetadata，这里兜底读一次时长 */
+    if (!duration) {
+      var d = a[0].audio.duration;
+      if (d && isFinite(d) && d > 0) {
+        duration = d;
+        seek.max = String(d);
+        durTime.textContent = fmt(d);
+      }
+    }
+
     var pos = a[0].audio.currentTime;
-    updateUI(pos);
+    /* 时长未知时不回写滑块（max 还是默认 100，会把滑块钉在最右端） */
+    if (duration) updateUI(Math.min(pos, duration));
+    else curTime.textContent = fmt(pos);
 
     for (var i = 0; i < a.length; i++) {
       var m = a[i];
@@ -872,5 +831,192 @@
 })();
 </script>
 
+
+<script>
+(function () {
+  "use strict";
+  var host = document.getElementById("angel");
+  var holder = host.querySelector(".bobber");
+  var hintEl = document.getElementById("hint");
+
+  function warn(msg) {
+    hintEl.textContent = msg;
+    hintEl.classList.remove("gone");
+  }
+
+  if (!window.PIXI || !PIXI.spine || !PIXI.spine.Spine || !window.ANGEL_ASSETS) {
+    warn("Spine 运行时或角色资源没加载");
+    return;
+  }
+
+  var app = new PIXI.Application({
+    resizeTo: host,
+    backgroundAlpha: 0,
+    antialias: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    autoDensity: true
+  });
+  holder.appendChild(app.view);
+
+  /* 舞台 SVG: viewBox 1600x900 + xMidYMax slice。
+     把角色放进同一个坐标系，脚就能精确落在台面，且随窗口等比缩放。 */
+  var VB_W = 1600, VB_H = 900;
+  var FOOT_Y = 700;      // 台面 600~725，脚落在靠前沿的木板上
+  /* getLocalBounds 把隐藏换装件（树/灌木）也算进去，可见角色只占高度约 42%。
+     用实测比例标定：CHAR_H 是整体边界高度，可见身高 ≈ CHAR_H * 0.42。 */
+  var VISIBLE_RATIO = 0.42;
+  var CHAR_H = 720;      // 可见身高约 300 SVG 单位 ≈ 屏幕 280px
+  var root = new PIXI.Container();
+  app.stage.addChild(root);
+
+  var character = null;
+  var baseW = 1, baseH = 1;
+  var hit = host.querySelector(".hit");
+
+  function place() {
+    var W = app.screen.width, H = app.screen.height;
+    var sc = Math.max(W / VB_W, H / VB_H);          // slice
+    var ox = (W - VB_W * sc) / 2;                    // xMid
+    var oy = H - VB_H * sc;                          // yMax
+    root.scale.set(sc);
+    root.position.set(ox, oy);
+
+    if (character) {
+      character.scale.set(CHAR_H / baseH);
+      character.position.set(VB_W / 2, FOOT_Y);
+    }
+
+    /* 点击热区贴合「可见部分」而非被隐藏部件撑大的整体边界 */
+    var visH = CHAR_H * VISIBLE_RATIO;
+    var visW = CHAR_H * baseW / baseH * 0.30;
+    hit.style.left = (ox + (VB_W / 2 - visW / 2) * sc) + "px";
+    hit.style.top = (oy + (FOOT_Y - visH) * sc) + "px";
+    hit.style.width = (visW * sc) + "px";
+    hit.style.height = (visH * sc) + "px";
+    hit.style.transform = "none";
+  }
+  place();
+  app.renderer.on("resize", place);
+
+  function syncOnOff() {
+    if (!character) return;
+    character.state.timeScale = host.classList.contains("on") ? 1 : 0;
+  }
+  new MutationObserver(syncOnOff).observe(host, {
+    attributes: true, attributeFilter: ["class"]
+  });
+
+  function b64ToBytes(b64) {
+    var raw = atob(b64), arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+
+  /* ===== 弹吉他循环 =====
+     底层播 Relax（抱琴姿态），这里在动画应用之后叠加骨骼变换：
+       右手小臂/手腕按节拍扫弦，四根拨弦手指依次错相拨动，琴身轻微摆动。
+     时间取音轨 currentTime，暂停时自动冻结，跳转进度也能立刻对上。 */
+  var BPM = 147.28;
+  var BEAT = 60 / BPM;
+  var FIRST_BEAT = 0.316;
+  var STRUM_BEATS = 2;          // 每 2 拍扫一次弦
+  var strumBones = null;
+
+  function installStrum(data) {
+    var sk = character.skeleton;
+    function bone(n) { return sk.findBone(n); }
+    strumBones = {
+      arm: bone("F_R_Arm"),
+      forearm: bone("F_R_Forearm"),
+      hand: bone("F_R_Hand"),
+      lute: bone("C_Weapon3"),
+      fingers: [
+        bone("C_WeaponHand2"), bone("C_WeaponHand3"),
+        bone("C_WeaponHand4"), bone("C_WeaponHand5")
+      ]
+    };
+
+    /* 注入点必须早于 skeleton.updateWorldTransform()：
+       Pixi 在 update() 内把网格顶点算完，之后改骨骼就无效了。
+       所以包装 state.apply —— 动画刚应用完、顶点还没算，正是叠加的时机。 */
+    var originalApply = character.state.apply.bind(character.state);
+    character.state.apply = function (skeleton) {
+      originalApply(skeleton);
+      var b = strumBones;
+      if (!b || !host.classList.contains("on")) return;
+
+      /* 与音轨对时：暂停自动冻结，拖动进度条也能立刻对上。
+         音频还没就绪时退回页面时钟，保证循环不会僵住。 */
+      var pos = (typeof window.__angelAudioTime === "function")
+        ? window.__angelAudioTime() : null;
+      if (pos === null || !isFinite(pos) || pos <= 0) {
+        pos = performance.now() / 1000;
+      }
+
+      var t = Math.max(0, pos - FIRST_BEAT);
+      var cycle = STRUM_BEATS * BEAT;
+      var phase = (t % cycle) / cycle;             // 0..1 一次扫弦周期
+
+      /* 下扫快、回弹慢 */
+      var down = Math.exp(-Math.pow((phase - 0.10) / 0.16, 2));
+      var up   = Math.exp(-Math.pow((phase - 0.52) / 0.22, 2));
+      var sweep = down - 0.55 * up;
+
+      if (b.forearm) b.forearm.rotation += sweep * 11;
+      if (b.hand)    b.hand.rotation    += sweep * 7;
+      if (b.arm)     b.arm.rotation     += sweep * 2.2;
+      if (b.lute)    b.lute.rotation    += sweep * 1.4;
+
+      /* 四指依次拨动：每根错开约 0.13 个周期 */
+      for (var i = 0; i < b.fingers.length; i++) {
+        var f = b.fingers[i];
+        if (!f) continue;
+        var p = phase - i * 0.13;
+        if (p < 0) p += 1;
+        var pluck = Math.exp(-Math.pow((p - 0.14) / 0.10, 2));
+        f.rotation += pluck * 13;
+      }
+      /* 不要在这里 updateWorldTransform：SpineBase.update 紧接着会做，
+         且叠加值会由下一帧 apply 覆盖，不会累积。 */
+    };
+  }
+
+  var img = new Image();
+  img.onload = function () {
+    var baseTex = PIXI.BaseTexture.from(img);
+    var atlas = new PIXI.spine.TextureAtlas(
+      ANGEL_ASSETS.atlas,
+      function (pageName, done) { done(baseTex); },
+      function (atlasObj) {
+        try {
+          var bin = new PIXI.spine.SkeletonBinary(new PIXI.spine.AtlasAttachmentLoader(atlasObj));
+          var data = bin.readSkeletonData(b64ToBytes(ANGEL_ASSETS.skel));
+          character = new PIXI.spine.Spine(data);
+          root.addChild(character);
+
+          var b = character.getLocalBounds();
+          baseW = b.width || 1;
+          baseH = b.height || 1;
+          character.pivot.set(b.x + baseW / 2, b.y + baseH);   // 脚底中心
+          place();
+
+          /* Relax：站着抱琴、自带拨弦手指动作，且不带树/灌木等场景道具 */
+          var names = data.animations.map(function (a) { return a.name; });
+          var pick = names.indexOf("Relax") >= 0 ? "Relax" : (names.filter(function (n) { return n !== "Default"; })[0] || names[0]);
+          character.state.setAnimation(0, pick, true);
+          installStrum(data);
+          syncOnOff();
+        } catch (e) {
+          warn("骨骼解析失败：" + (e && e.message ? e.message : e));
+          console.error(e);
+        }
+      }
+    );
+    if (!atlas.pages.length) warn("图集里没有贴图页");
+  };
+  img.onerror = function () { warn("角色贴图解码失败"); };
+  img.src = "data:image/png;base64," + ANGEL_ASSETS.png;
+})();
+</script>
 </body>
 </html>
