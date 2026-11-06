@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>GitStudy-AngelBand · 西部舞台 v2.1.0</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.3.0</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #0b0710; }
@@ -96,11 +96,12 @@
   }
 
   /* ===== 怪兽（Spine 渲染层） ===== */
-  #angel, #phonor { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  #angel, #phonor, #bass { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
   #angel .figure, #angel .bobber,
-  #phonor .figure, #phonor .bobber { position: absolute; inset: 0; }
-  #angel canvas, #phonor canvas { display: block; width: 100%; height: 100%; }
-  #angel .hit, #phonor .hit {
+  #phonor .figure, #phonor .bobber,
+  #bass .figure, #bass .bobber { position: absolute; inset: 0; }
+  #angel canvas, #phonor canvas, #bass canvas { display: block; width: 100%; height: 100%; }
+  #angel .hit, #phonor .hit, #bass .hit {
     position: absolute; pointer-events: auto; cursor: pointer; z-index: 3;
   }
 
@@ -485,6 +486,12 @@
     <div class="hit"></div>
   </div>
 
+  <!-- 贝斯手：蓝发吹号者（Pixi 渲染） -->
+  <div id="bass" class="monster off" data-monster="bass">
+    <div class="figure"><div class="bobber"></div></div>
+    <div class="hit"></div>
+  </div>
+
   <!-- 风滚草 -->
   <svg class="tumbleweed" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
     <g fill="none" stroke="#8a6a4a" stroke-width="2.2" opacity=".8">
@@ -508,9 +515,9 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">GitStudy-AngelBand · v2.1.0 · 西部舞台</div>
+  <div class="tag">GitStudy-AngelBand · v2.3.0 · 西部舞台</div>
 
-  <div class="hint" id="hint">点 击 吉 他 手 ， 让 它 开 演</div>
+  <div class="hint" id="hint">点 击 乐 手 ， 让 他 们 一 个 个 上 场</div>
 
   <div class="player">
     <button id="playBtn" type="button" aria-label="播放">▶</button>
@@ -524,6 +531,7 @@
 <script src="spine/lib/pixi-spine-3.8.js"></script>
 <script src="spine/lib/angel-assets.js"></script>
 <script src="spine/lib/phonor-assets.js"></script>
+<script src="spine/lib/mostma-assets.js"></script>
 <script>
 (function () {
   "use strict";
@@ -542,7 +550,8 @@
        2) 在这里登记一条配置（音轨 + 隔几拍点一次头） */
   var MONSTERS = [
     { id: "singer", src: "singer.mp3", bobBeats: 2, volume: 0.95 },
-    { id: "guitar", src: "guitar.mp3", bobBeats: 2, volume: 0.9 }
+    { id: "guitar", src: "guitar.mp3", bobBeats: 2, volume: 0.9 },
+    { id: "bass",   src: "bass.mp3",   bobBeats: 2, volume: 0.95 }
   ];
 
   var playBtn = document.getElementById("playBtn");
@@ -658,11 +667,16 @@
         safePlay(m);
       }
     } else {
+      /* 下场只暂停，不回零：停下的位置记到 pendingPos，
+         下次上场（或按播放键）从这一刻接着演 */
+      var keep = m.audio.currentTime;
       m.el.classList.remove("jam", "bob");
       m.lastBob = -1;
       m.audio.pause();
-      m.audio.currentTime = 0;
-      if (!active().length) updateUI(0);
+      if (!active().length) {
+        pendingPos = keep;
+        updateUI(keep);
+      }
     }
     refreshControls();
   }
@@ -934,6 +948,93 @@
     };
   }
 
+  /* 从 atlas 文本里取出各区域的矩形（贴图集 984×984 上的位置） */
+  function parseAtlasRegions(txt) {
+    var out = {};
+    var lines = String(txt).split(/\r?\n/);
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (!line.trim()) { cur = null; continue; }
+      if (/^\s/.test(line) && cur) {
+        var kv = line.trim().split(":");
+        if (kv.length >= 2) cur[kv[0].trim()] = kv[1].trim();
+      } else if (line.indexOf(":") < 0) {
+        cur = {};
+        out[line.trim()] = cur;
+      }
+    }
+    return out;
+  }
+
+  /* 悬浮乐器：从图集里抠出一块贴图，钉在嘴部骨骼上。
+     她原本的设计就是身边浮着乐器，所以不让它进骨骼层级，
+     而是每帧跟着嘴走，再按拍子做一点气息起伏。 */
+  function addProp(character, prop, assets, baseTex, host) {
+    var regions = parseAtlasRegions(assets.atlas);
+    var r = regions[prop.region];
+    if (!r) { warn("图集里找不到乐器区域：" + prop.region); return null; }
+
+    var xy = r.xy.split(","), wh = r.size.split(",");
+    var tex = new PIXI.Texture(baseTex, new PIXI.Rectangle(+xy[0], +xy[1], +wh[0], +wh[1]));
+    var sp = new PIXI.Sprite(tex);
+    sp.anchor.set(prop.anchor[0], prop.anchor[1]);
+
+    var baseScale = prop.scale;
+    var baseRot = prop.tilt * Math.PI / 180;
+    sp.scale.set(baseScale);
+    sp.rotation = baseRot;
+    character.addChild(sp);
+
+    var origUpdate = character.update.bind(character);
+    character.update = function (dt) {
+      origUpdate(dt);
+      var mouth = character.skeleton.findBone(prop.bone || "F_Mouth_I");
+      if (!mouth) return;
+
+      /* 只有她在演的时候才送气；退场后号要完全静止，
+         否则别人在演、音轨在走，这支号会一直抽动 */
+      var puff = 0, wobble = 0;
+      if (host.classList.contains("on")) {
+        var pos = audioPos();
+        var t = Math.max(0, (pos === null ? 0 : pos) - FIRST_BEAT);
+        var phase = (t % BEAT) / BEAT;
+        puff = Math.sin(phase * Math.PI);         // 每拍一次送气
+        wobble = (puff - 0.5) * 0.022;
+      }
+
+      sp.position.set(mouth.worldX + prop.offset[0],
+                      mouth.worldY + prop.offset[1] - puff * 1.8);
+      sp.rotation = baseRot + wobble;
+      sp.scale.set(baseScale * (1 + puff * 0.01));
+    };
+    return sp;
+  }
+
+  /* 贝斯手：两拍一个来回的轻摇，头随拍子点一下 */
+  function bassMotion(character, host) {
+    var sk = character.skeleton;
+    var chest = sk.findBone("F_Chest_I");
+    var head  = sk.findBone("F_Head_I");
+
+    var originalApply = character.state.apply.bind(character.state);
+    character.state.apply = function (skeleton) {
+      originalApply(skeleton);
+      if (!host.classList.contains("on")) return;
+
+      var pos = audioPos();
+      if (pos === null || pos <= 0) pos = performance.now() / 1000;
+
+      var t = Math.max(0, pos - FIRST_BEAT);
+      var cycle = BEAT * 2;
+      var phase = (t % cycle) / cycle;
+      var sway = Math.sin(phase * Math.PI * 2);
+
+      if (chest) chest.rotation += sway * 0.9;
+      if (head)  head.rotation  -= sway * 1.6;
+    };
+  }
+
   function createCharacter(cfg) {
     var host = document.getElementById(cfg.el);
     if (!host) return;
@@ -1001,18 +1102,34 @@
             character = new PIXI.spine.Spine(data);
             root.addChild(character);
 
+            var names = data.animations.map(function (a) { return a.name; });
+            var pick = names.indexOf(cfg.anim) >= 0
+              ? cfg.anim
+              : (names.filter(function (n) { return n !== "Default"; })[0] || names[0]);
+
+            /* 有的角色在 setup 姿态里还挂着远处的道具（乐器会挂在脚边），
+               直接量包围盒会把它们算进去，导致缩放偏小、人物飘在半空。
+               posedBounds 的角色先把动画应用上、清掉道具槽，再量。 */
+            if (cfg.posedBounds) {
+              for (var si = 0; si < character.skeleton.slots.length; si++) {
+                var sl = character.skeleton.slots[si];
+                if (/Instr/.test(sl.data.name)) sl.setAttachment(null);
+              }
+              character.state.setAnimation(0, pick, true);
+              character.state.update(0);
+              character.state.apply(character.skeleton);
+              character.skeleton.updateWorldTransform();
+            }
+
             var b = character.getLocalBounds();
             baseW = b.width || 1;
             baseH = b.height || 1;
             character.pivot.set(b.x + baseW / 2, b.y + baseH);
             place();
 
-            var names = data.animations.map(function (a) { return a.name; });
-            var pick = names.indexOf(cfg.anim) >= 0
-              ? cfg.anim
-              : (names.filter(function (n) { return n !== "Default"; })[0] || names[0]);
             character.state.setAnimation(0, pick, true);
 
+            if (cfg.prop) addProp(character, cfg.prop, assets, baseTex, host);
             if (cfg.motion) cfg.motion(character, host);
             syncOnOff();
           } catch (e) {
@@ -1027,11 +1144,25 @@
     img.src = "data:image/png;base64," + assets.png;
   }
 
-  /* 站位：舞台中线 800，吉他手在右，主唱在左 */
+  /* 站位：舞台中线 800，主唱 500 / 吉他 830 / 贝斯 1160，三人等距一字排开 */
   createCharacter({
     el: "angel", assets: "ANGEL_ASSETS", anim: "Relax",
     x: 830, charH: 720, visRatio: 0.42, visWFactor: 0.30,
     motion: guitarMotion
+  });
+
+  createCharacter({
+    el: "bass", assets: "MOSTMA_ASSETS", anim: "Relax",
+    x: 1160, charH: 300, visRatio: 0.98, visWFactor: 0.70,
+    posedBounds: true,
+    motion: bassMotion,
+    prop: {
+      region: "C_Instruments_D_II",   /* 四个号里选萨克斯：音域最低、轮廓最优雅 */
+      anchor: [0.22, 0.05],           /* 锚点就是吹嘴 */
+      scale: 0.54,
+      tilt: 12,
+      offset: [-6, -1]
+    }
   });
 
   createCharacter({
