@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>GitStudy-AngelBand · 西部舞台 v2.4.0</title>
+<title>GitStudy-AngelBand · 西部舞台 v2.4.1</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #0b0710; }
@@ -522,7 +522,7 @@
   </div>
 
   <div class="vignette"></div>
-  <div class="tag">GitStudy-AngelBand · v2.4.0 · 西部舞台</div>
+  <div class="tag">GitStudy-AngelBand · v2.4.1 · 西部舞台</div>
 
   <div class="hint" id="hint">点 击 乐 手 ， 让 他 们 一 个 个 上 场</div>
 
@@ -673,18 +673,30 @@
       });
       if (transport === "playing") {
         m.el.classList.add("jam");
-        safePlay(m);
+        safePlay(m, JOIN_FADE);       /* 从 0 抬起来，别在乐句中间硬插进来 */
+      } else {
+        cancelFade(m);
+        m.audio.volume = m.volume;
       }
     } else {
-      /* 下场只暂停，不回零：停下的位置记到 pendingPos，
-         下次上场（或按播放键）从这一刻接着演 */
-      var keep = m.audio.currentTime;
+      /* 下场也不硬切：先淡出去，淡完再暂停。
+         停下的位置记到 pendingPos，下次上场（或按播放键）从这一刻接着演 */
       m.el.classList.remove("jam", "bob");
       m.lastBob = -1;
-      m.audio.pause();
-      if (!active().length) {
-        pendingPos = keep;
-        updateUI(keep);
+      var lastOne = !active().length;
+      if (m.audio.paused) {
+        cancelFade(m);
+        m.audio.volume = m.volume;
+      } else {
+        fadeOut(m, lastOne ? function () {
+          /* 只剩她一个：等淡完再记位置，停下的点正好是淡出结束的点 */
+          pendingPos = m.audio.currentTime;
+          updateUI(pendingPos);
+        } : null);
+      }
+      if (lastOne && m.audio.paused) {
+        pendingPos = m.audio.currentTime;
+        updateUI(pendingPos);
       }
     }
     refreshControls();
@@ -701,7 +713,7 @@
         if (transport === "playing") syncSway(m, m.audio.currentTime);
       });
       m.el.classList.add("jam");
-      safePlay(m);
+      safePlay(m, RESUME_FADE);
     });
   }
 
@@ -709,26 +721,88 @@
     transport = "paused";
     playBtn.textContent = "▶";
     active().forEach(function (m) {
-      m.audio.pause();
       m.el.classList.remove("jam", "bob");
+      if (m.audio.paused) return;
+      fadeOut(m);            /* 暂停也留一点尾巴，硬切会「啪」一下 */
     });
   }
 
   function endSong() {
-    pauseTransport();
+    /* 自然放完了，声音已经没了，淡出没意义：直接归零 */
+    transport = "paused";
+    playBtn.textContent = "▶";
     active().forEach(function (m) {
+      cancelFade(m);
+      m.audio.pause();
       m.audio.currentTime = 0;
+      m.audio.volume = m.volume;
       m.lastBob = -1;
     });
     updateUI(0);
   }
 
-  function safePlay(m) {
+  function safePlay(m, fade) {
     m.ready.then(function () {
       if (!m.on || transport !== "playing") return;
+      if (fade) { cancelFade(m); m.audio.volume = 0; }   /* 先静音，等真的播起来再抬 */
       var p = m.audio.play();
-      if (p && p.catch) p.catch(function () { pauseTransport(); });
+      if (!p) return;
+      var ok = function () {
+        if (!fade) return;
+        if (!m.on || transport !== "playing" || m.audio.paused) {
+          m.audio.volume = m.volume;
+          return;
+        }
+        startFade(m, m.volume, fade, null);
+      };
+      if (p.then) p.then(ok, function () { pauseTransport(); });
+      else if (p.catch) p.catch(function () { pauseTransport(); });
     });
+  }
+
+  /* ---------- 音量缓入缓出 ----------
+     新乐手直接在乐句中间插进来，音量从 0 抬起来才不刺耳；
+     退场、暂停也不硬切，先淡出去再暂停。 */
+  var JOIN_FADE = 0.5;      // 单人加入合奏
+  var RESUME_FADE = 0.28;   // 暂停后继续
+  var FADE_OUT = 0.3;       // 退场 / 暂停
+
+  function startFade(m, to, dur, done) {
+    m.fade = {
+      from: m.audio.volume,
+      to: to,
+      t0: performance.now(),
+      dur: Math.max(0.08, dur),
+      done: done || null
+    };
+  }
+
+  function cancelFade(m) { m.fade = null; }
+
+  function fadeOut(m, done) {
+    cancelFade(m);
+    startFade(m, 0, FADE_OUT, function () {
+      m.audio.pause();
+      m.audio.volume = m.volume;
+      if (done) done();
+    });
+  }
+
+  /* 主循环里推进：smoothstep 曲线，两头软、中间快，比线性听着自然 */
+  function tickFades(now) {
+    for (var i = 0; i < MONSTERS.length; i++) {
+      var m = MONSTERS[i], f = m.fade;
+      if (!f) continue;
+      var k = (now - f.t0) / (f.dur * 1000);
+      if (k > 1) k = 1;
+      var e = k * k * (3 - 2 * k);
+      var v = f.from + (f.to - f.from) * e;
+      m.audio.volume = v < 0 ? 0 : (v > 1 ? 1 : v);
+      if (k >= 1) {
+        m.fade = null;
+        if (f.done) f.done();
+      }
+    }
   }
 
   /* ---------- 播放条状态（静音/播放控制的初始与切换态） ---------- */
@@ -818,6 +892,7 @@
   /* ---------- 主循环：进度、点头、乐队对表，全部读同一时钟 ---------- */
   function frame() {
     requestAnimationFrame(frame);
+    tickFades(performance.now());
     if (transport !== "playing" || dragging) return;
     var a = active();
     if (!a.length) return;
